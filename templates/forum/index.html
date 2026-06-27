@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Форум • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-6 py-8">
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-4xl font-bold flex items-center gap-3">
+                <i class="fa-solid fa-comments text-[#e11d48]"></i>
+                Форум
+            </h1>
+            <p class="text-white/60 mt-1">Обсуждайте мангу, делитесь рекомендациями и общайтесь</p>
+        </div>
+        {% if current_user %}
+        <a href="/forum" class="px-4 py-2 bg-[#e11d48] hover:bg-rose-700 rounded-2xl text-sm font-medium flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i> Создать топик
+        </a>
+        {% endif %}
+    </div>
+
+    <!-- Categories and Forums -->
+    {% for cat in categories %}
+    <div class="mb-8">
+        <div class="flex items-center gap-3 mb-3 px-1">
+            <h2 class="text-xl font-semibold">{{ cat.name }}</h2>
+            {% if cat.description %}
+            <span class="text-sm text-white/50">— {{ cat.description }}</span>
+            {% endif %}
+        </div>
+
+        <div class="bg-[#111] border border-white/10 rounded-3xl overflow-hidden">
+            {% if forums_by_cat.get(cat.id) %}
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-white/10 text-white/50">
+                        <th class="text-left px-6 py-3 font-medium">Форум</th>
+                        <th class="text-center px-4 py-3 font-medium w-20">Топиков</th>
+                        <th class="text-center px-4 py-3 font-medium w-20">Постов</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for f in forums_by_cat[cat.id] %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4">
+                            <a href="{{ url_for('forum.view_forum', forum_id=f.id) }}" class="font-semibold hover:text-[#e11d48]">{{ f.name }}</a>
+                            {% if f.description %}
+                            <div class="text-xs text-white/50 mt-0.5">{{ f.description }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-center text-white/70 tabular-nums">{{ f.topic_count }}</td>
+                        <td class="px-4 py-4 text-center text-white/70 tabular-nums">{{ f.post_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="px-6 py-4 text-white/50 text-sm">Пока нет форумов в этой категории.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Recent topics -->
+    {% if recent %}
+    <div class="mt-10">
+        <h3 class="text-lg font-semibold mb-4 px-1 flex items-center gap-2">
+            <i class="fa-solid fa-clock"></i> Последние обсуждения
+        </h3>
+        <div class="bg-[#111] border border-white/10 rounded-3xl p-1">
+            {% for t in recent %}
+            <a href="{{ url_for('forum.view_topic', topic_id=t.id) }}" 
+               class="flex items-center justify-between px-5 py-3 rounded-2xl hover:bg-white/5 mx-1 my-1 transition">
+                <div class="flex-1 min-w-0">
+                    <div class="font-medium truncate">{{ t.title }}</div>
+                    <div class="text-xs text-white/50">
+                        в {{ t.forum_name }} • {{ t.username }} • {{ t.created_at[:10] }}
+                    </div>
+                </div>
+                <div class="text-xs px-3 py-1 bg-white/5 rounded-full text-white/60 ml-3 whitespace-nowrap">
+                    {{ t.reply_count }} ответов
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

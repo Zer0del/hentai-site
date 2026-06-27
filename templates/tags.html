@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Теги • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-12">
+    <h1 class="text-4xl font-semibold tracking-tighter mb-6">Все теги</h1>
+
+    {% if tags %}
+    <div class="flex flex-wrap gap-3">
+        {% for tag, count in tags %}
+        <a href="/?tag={{ tag|urlencode }}" class="tag-pill px-4 py-1 text-sm flex items-center gap-1 hover:bg-[#e11d48] hover:text-white">
+            {{ tag }}
+            <span class="text-xs bg-white/10 px-1.5 rounded">{{ count }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-white/50">Тегов пока нет.</p>
+    {% endif %}
+</div>
+{% endblock %}

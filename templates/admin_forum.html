@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Управление форумом • Админ{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-6 py-8">
+    <div class="flex items-center gap-4 mb-8">
+        <a href="/admin" class="text-sm flex items-center gap-1 text-white/70 hover:text-white">
+            <i class="fa-solid fa-arrow-left"></i> Назад в админ
+        </a>
+        <h1 class="text-3xl font-bold">Управление форумом</h1>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Stats -->
+        <div class="bg-[#111] border border-white/10 rounded-3xl p-6">
+            <div class="text-sm text-white/60 mb-2">Статистика</div>
+            <div class="flex gap-8 text-2xl font-semibold">
+                <div>{{ topics_count }} <span class="text-sm text-white/50 align-bottom">топиков</span></div>
+                <div>{{ posts_count }} <span class="text-sm text-white/50 align-bottom">постов</span></div>
+            </div>
+        </div>
+
+        <!-- Create Category -->
+        <div class="bg-[#111] border border-white/10 rounded-3xl p-6">
+            <h3 class="font-semibold mb-4">Новая категория</h3>
+            <form method="post" action="/admin/forum/create_category" class="space-y-3" id="catForm">
+                <input type="text" name="name" placeholder="Название категории" required
+                       class="w-full bg-zinc-900 border border-white/10 px-4 py-2.5 rounded-2xl text-sm">
+                <input type="text" name="description" placeholder="Описание (опционально)"
+                       class="w-full bg-zinc-900 border border-white/10 px-4 py-2.5 rounded-2xl text-sm">
+                <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 px-5 py-2 rounded-2xl text-sm">Создать категорию</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Forum -->
+    <div class="mt-8 bg-[#111] border border-white/10 rounded-3xl p-6">
+        <h3 class="font-semibold mb-4">Новый форум (доска)</h3>
+        <form method="post" action="/admin/forum/create_forum" class="grid grid-cols-1 md:grid-cols-4 gap-3" id="forumForm">
+            <select name="category_id" required class="bg-zinc-900 border border-white/10 px-4 py-2.5 rounded-2xl text-sm">
+                {% for cat in categories %}
+                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="name" placeholder="Название форума" required
+                   class="md:col-span-2 bg-zinc-900 border border-white/10 px-4 py-2.5 rounded-2xl text-sm">
+            <div class="flex gap-3">
+                <input type="text" name="description" placeholder="Описание" class="flex-1 bg-zinc-900 border border-white/10 px-4 py-2.5 rounded-2xl text-sm">
+                <button type="submit" class="bg-[#e11d48] hover:bg-rose-600 px-5 py-2 rounded-2xl text-sm whitespace-nowrap">Создать</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Existing structure -->
+    <div class="mt-10">
+        <h3 class="font-semibold mb-4 px-1">Текущая структура форума</h3>
+        {% for cat in categories %}
+        <div class="mb-6">
+            <div class="px-4 py-2 bg-white/5 rounded-t-2xl flex items-center">
+                <span class="font-semibold">{{ cat.name }}</span>
+                <span class="ml-auto text-xs text-white/40">{{ cat.description }}</span>
+            </div>
+            <div class="border border-t-0 border-white/10 rounded-b-2xl overflow-hidden">
+                {% set fs = forums.get(cat.id, []) %}
+                {% if fs %}
+                <table class="w-full text-sm">
+                    <tbody class="divide-y divide-white/10">
+                    {% for f in fs %}
+                    <tr>
+                        <td class="px-5 py-3 font-medium">{{ f.name }}</td>
+                        <td class="px-4 py-3 text-white/50 text-xs">{{ f.description or '—' }}</td>
+                        <td class="px-4 py-3 text-right text-xs text-white/40 w-24">ID: {{ f.id }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="px-5 py-4 text-white/50 text-sm">Нет форумов в категории</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Quick moderation note -->
+    <div class="mt-8 text-xs text-white/40 px-1">
+        Для модерации постов используйте ссылку «Удалить» прямо в топике (доступно только админам).
+        <br>Чтобы добавить больше категорий/форумов — используйте формы выше.
+    </div>
+</div>
+
+<script>
+document.getElementById('catForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const fd = new FormData(this);
+    const r = await fetch(this.action, {method:'POST', body: fd});
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else alert(j.error || 'Ошибка');
+});
+
+document.getElementById('forumForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const fd = new FormData(this);
+    const r = await fetch(this.action, {method:'POST', body: fd});
+    const j = await r.json();
+    if (j.ok) location.reload();
+    else alert(j.error || 'Ошибка');
+});
+</script>
+{% endblock %}

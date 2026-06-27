@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Вход • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-md mx-auto px-6 py-12">
+    <div class="bg-[#111] rounded-3xl border border-white/10 p-8">
+        <h1 class="text-2xl font-semibold mb-6">Войти в аккаунт</h1>
+
+        {% if error %}
+        <div class="mb-4 text-red-400 text-sm">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/login" class="space-y-4">
+            <div>
+                <label class="text-xs text-white/60">Имя пользователя</label>
+                <input name="username" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5" required>
+            </div>
+            <div>
+                <label class="text-xs text-white/60">Пароль</label>
+                <input name="password" type="password" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5" required>
+            </div>
+            <button type="submit" class="w-full fakku-btn py-3 rounded-2xl font-semibold">Войти</button>
+        </form>
+
+        <div class="my-6 text-center text-xs text-white/50">или создайте нового</div>
+
+        <form method="post" action="/register" class="space-y-4">
+            <input name="username" placeholder="Новый пользователь" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5" required>
+            <input name="password" type="password" placeholder="Пароль" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5" required>
+            <button type="submit" class="w-full py-3 rounded-2xl bg-white/10 hover:bg-white/15 font-semibold">Зарегистрироваться и войти</button>
+        </form>
+
+        {% if users %}
+        <div class="mt-8">
+            <div class="text-xs text-white/50 mb-2">Быстрый вход (демо пользователи)</div>
+            <div class="flex flex-wrap gap-2">
+                {% for u in users %}
+                <a href="/login_as/{{ u.id }}" class="px-3 py-1 text-xs bg-white/5 hover:bg-[#e11d48] rounded-full">{{ u.username }}</a>
+                {% endfor %}
+            </div>
+            <div class="text-[10px] text-white/40 mt-1">Пароли: demo_user=demo, fan_lover=123, hentai_fan=pass</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

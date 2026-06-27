@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Профиль • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-2xl mx-auto px-6 py-8">
+    <div class="flex items-center gap-x-3 mb-8">
+        {% if user and user.get('avatar') %}
+        <img src="/uploads/avatars/{{ user.avatar }}" class="w-12 h-12 rounded-full object-cover border border-white/10" onerror="this.src='https://picsum.photos/id/1011/48/48'">
+        {% endif %}
+        <h1 class="text-3xl font-semibold" style="color: {{ user.get('username_color') or '#e11d48' }}">
+            {{ user.username }}
+            {% if user.get('is_premium') %}
+            <span class="text-xs ml-2 px-2 py-0.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-black rounded-full font-medium">PREMIUM</span>
+            {% endif %}
+        </h1>
+    </div>
+
+    {% if recommendations %}
+    <div class="mb-8">
+        <h2 class="text-xl font-semibold mb-4">Рекомендации для вас</h2>
+        <div class="grid-manga">
+            {% for m in recommendations %}
+            <a href="/manga/{{ m.slug }}" class="block group">
+                <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
+                    <img src="{{ m.cover }}" class="manga-cover w-full transition group-hover:scale-[1.015]" onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                    <div class="px-3 py-3">
+                        <div class="manga-title font-semibold text-[15px] leading-tight">{{ m.title }}</div>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Favorites -->
+    <div class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">Избранное</h2>
+        {% if favorites %}
+        <div class="grid-manga">
+            {% for m in favorites %}
+            <a href="/manga/{{ m.slug }}" class="block group">
+                <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
+                    <img src="{{ m.cover }}" class="manga-cover w-full" onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                    <div class="px-3 py-3">
+                        <div class="font-semibold text-sm group-hover:text-[#e11d48]">{{ m.title }}</div>
+                        {% if m.author %}
+                        <div class="text-[11px] text-white/50 mt-0.5">{{ m.author }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-white/40">Пока нет избранного. Добавляйте мангу на странице тайтла.</p>
+        {% endif %}
+    </div>
+
+    <!-- History -->
+    <div class="mb-10">
+        <h2 class="text-xl font-semibold mb-4">История чтения</h2>
+        {% if history %}
+        <div class="space-y-3">
+            {% for h in history %}
+            <a href="/manga/{{ h.slug }}" class="flex items-center gap-4 bg-[#111] rounded-2xl p-3 border border-white/5 hover:border-white/10">
+                <img src="{{ h.cover }}" class="w-14 h-20 object-cover rounded" onerror="this.src='https://picsum.photos/id/1011/56/80'">
+                <div class="flex-1">
+                    <div class="font-medium">{{ h.title }}</div>
+                    {% if h.author %}<div class="text-[11px] text-white/50">{{ h.author }}</div>{% endif %}
+                    <div class="text-xs text-white/50">
+                        {% if h.completed %}Прочитано полностью{% else %}Страница {{ h.last_page }}{% endif %}
+                        • {{ h.last_read_at[:16] if h.last_read_at else '' }}
+                    </div>
+                </div>
+                <div class="text-xs px-2 py-1 bg-white/5 rounded">Читать</div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-white/40">История чтения пуста.</p>
+        {% endif %}
+    </div>
+
+    {% if not user.get('is_premium') %}
+    <div class="mb-10 p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-2xl">
+        <h3 class="font-semibold mb-2">Получить Premium (тест)</h3>
+        <p class="text-sm text-white/70 mb-3">Нажми кнопку, чтобы активировать премиум-функции (скачивание, рекомендации, аватар, цвет ника).</p>
+        <button onclick="grantPremium()" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-black font-medium rounded-xl text-sm">Активировать Premium</button>
+    </div>
+    {% else %}
+    <!-- Premium settings -->
+    <div class="mb-10 p-4 bg-[#111] border border-white/10 rounded-2xl">
+        <h3 class="font-semibold mb-3">Premium настройки</h3>
+        <form id="premium-settings" enctype="multipart/form-data" class="space-y-4 text-sm">
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-white/50 mb-1">Аватарка</label>
+                <input type="file" name="avatar" accept="image/*" class="block w-full text-sm">
+            </div>
+            <div>
+                <label class="block text-xs uppercase tracking-widest text-white/50 mb-1">Цвет ника</label>
+                <input type="color" name="color" value="{{ user.get('username_color') or '#e11d48' }}" class="w-16 h-9 p-0 bg-transparent border border-white/10 rounded">
+            </div>
+            <button type="button" onclick="updatePremiumSettings()" class="px-4 py-2 bg-[#e11d48] hover:bg-[#be123c] rounded-xl text-sm">Сохранить настройки</button>
+        </form>
+        <p class="text-[10px] text-white/40 mt-2">Аватар и цвет ника доступны только премиум пользователям.</p>
+    </div>
+    {% endif %}
+
+    {% if not user.get('is_admin') %}
+    <div class="mb-10 p-4 bg-blue-900/20 border border-blue-500/30 rounded-2xl">
+        <h3 class="font-semibold mb-2">Получить права админа (тест)</h3>
+        <p class="text-sm text-white/70 mb-3">Чтобы видеть кнопку удаления комментариев на страницах манг.</p>
+        <button onclick="grantAdmin()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-xl text-sm">Активировать Админ</button>
+    </div>
+    {% endif %}
+    {% if user.get('is_admin') %}
+    <p class="text-xs text-blue-400 mb-4">У вас права администратора — кнопка «Удалить» будет рядом с каждым комментарием на страницах манг.</p>
+    {% endif %}
+
+    <!-- My ratings + tag weights -->
+    <div class="grid md:grid-cols-2 gap-8">
+        <div>
+            <h2 class="text-xl font-semibold mb-4">Мои оценки</h2>
+            {% if my_ratings %}
+            <ul class="space-y-1 text-sm">
+                {% for r in my_ratings %}
+                <li>
+                    <a href="/manga/{{ r.slug }}" class="flex justify-between items-center bg-[#111] hover:bg-white/10 px-3 py-2 rounded-xl transition-colors">
+                        <span class="truncate">{{ r.title }}</span>
+                        <span class="text-[#f59e0b] ml-2 flex-shrink-0">{{ r.score }} ★</span>
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-white/40 text-sm">Вы ещё не ставили оценки.</p>
+            {% endif %}
+        </div>
+
+        <div>
+            <h2 class="text-xl font-semibold mb-4">Ваши предпочтения по тегам</h2>
+            {% if tag_weights %}
+            <div class="text-sm space-y-1 bg-[#111] rounded-2xl p-4 max-h-64 overflow-auto">
+                {% for tag, w in tag_weights %}
+                <div class="flex justify-between py-0.5 border-b border-white/5 last:border-0">
+                    <span class="truncate">{{ tag }}</span>
+                    <span class="font-mono ml-2 {{ 'text-emerald-400' if w > 0 else 'text-red-400' if w < 0 else 'text-white/50' }}">
+                        {{ w }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="text-xs text-white/40 mt-2">Веса рассчитываются на основе ваших оценок и избранного. Положительные — любимые теги.</p>
+            {% else %}
+            <p class="text-white/40 text-sm">Поставьте оценки или добавьте мангу в избранное, чтобы увидеть предпочтения.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function grantPremium() {
+    const btns = document.querySelectorAll('button');
+    btns.forEach(b => b.disabled = true);
+    try {
+        const res = await fetch('/api/grant_premium', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert(data.error || 'Ошибка');
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+    } finally {
+        btns.forEach(b => b.disabled = false);
+    }
+}
+
+async function grantAdmin() {
+    const btns = document.querySelectorAll('button');
+    btns.forEach(b => b.disabled = true);
+    try {
+        const res = await fetch('/api/grant_admin', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert(data.error || 'Ошибка');
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+    } finally {
+        btns.forEach(b => b.disabled = false);
+    }
+}
+
+async function updatePremiumSettings() {
+    const form = document.getElementById('premium-settings');
+    const fd = new FormData(form);
+    try {
+        const res = await fetch('/api/update_profile', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            alert('Настройки сохранены!');
+            location.reload();
+        } else {
+            alert(data.error || 'Ошибка');
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+    }
+}
+</script>
+{% endblock %}

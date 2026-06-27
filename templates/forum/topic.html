@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{{ topic.title }} • Форум{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-6 py-8">
+    <div class="mb-4">
+        <a href="{{ url_for('forum.view_forum', forum_id=topic.forum_id) }}" class="text-sm text-white/60 hover:text-white">
+            ← {{ topic.forum_name }}
+        </a>
+    </div>
+
+    <div class="flex items-start justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-bold">{{ topic.title }}</h1>
+            <div class="text-sm text-white/60 mt-1">
+                от <span class="text-white">{{ topic.username }}</span> • {{ topic.created_at[:16] }}
+                {% if topic.is_locked %}<span class="ml-2 px-2 py-px bg-white/10 rounded text-xs">ЗАКРЫТ</span>{% endif %}
+            </div>
+        </div>
+        {% if current_user %}
+        <a href="#reply" class="px-4 py-2 text-sm border border-white/20 hover:bg-white/5 rounded-2xl">Ответить</a>
+        {% endif %}
+    </div>
+
+    <!-- Posts -->
+    <div id="posts" class="space-y-6">
+        {% for p in posts %}
+        <div class="bg-[#111] border border-white/10 rounded-3xl p-5">
+            <div class="flex justify-between text-xs text-white/50 mb-2">
+                <div>
+                    <span class="font-semibold text-white">{{ p.username }}</span> 
+                    • {{ p.created_at[:16] }}
+                    {% if p.updated_at != p.created_at %}<span class="text-[10px]">(отред.)</span>{% endif %}
+                </div>
+                {% if current_user and current_user.get('is_admin') %}
+                <form method="post" action="{{ url_for('forum.delete_post', post_id=p.id) }}" onsubmit="return confirm('Удалить пост?');" class="inline">
+                    <button type="submit" class="text-red-400 hover:text-red-500 text-xs">Удалить</button>
+                </form>
+                {% endif %}
+            </div>
+            <div class="prose prose-invert max-w-none text-[15px] leading-relaxed whitespace-pre-line">
+                {{ p.content }}
+            </div>
+
+            {% if p.attachment %}
+            <div class="mt-2 text-xs">
+                <a href="/uploads/forum/{{ p.attachment }}" target="_blank" class="text-[#e11d48] hover:underline">📎 Скачать прикреплённый файл</a>
+            </div>
+            {% endif %}
+
+            <!-- Votes -->
+            <div class="flex items-center gap-2 mt-3 text-sm">
+                <button onclick="votePost({{ p.id }}, 1)" class="text-2xl leading-none {{ 'text-green-400' if p.my_vote == 1 else 'text-white/40 hover:text-green-400' }}">✅</button>
+                <span id="score-{{ p.id }}" class="font-mono px-1 {{ 'text-green-400' if p.score > 0 else 'text-red-400' if p.score < 0 else 'text-white/50' }}">{{ p.score }}</span>
+                <button onclick="votePost({{ p.id }}, -1)" class="text-2xl leading-none {{ 'text-red-400' if p.my_vote == -1 else 'text-white/40 hover:text-red-400' }}">❌</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="flex justify-center gap-1 my-6 text-sm">
+        {% for p in range(1, total_pages + 1) %}
+        <a href="?page={{p}}#posts" class="px-3 py-1 rounded-full {{ 'bg-white/10' if p == page else 'hover:bg-white/5' }}">{{p}}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Reply form -->
+    {% if current_user %}
+    {% if not topic.is_locked %}
+    <div id="reply" class="mt-8 bg-[#111] border border-white/10 rounded-3xl p-5">
+        <h4 class="font-semibold mb-3">Ваш ответ</h4>
+        <form method="post" action="{{ url_for('forum.reply_topic', topic_id=topic.id) }}" enctype="multipart/form-data">
+            <textarea name="content" rows="5" required
+                      class="w-full bg-zinc-900 border border-white/10 rounded-2xl p-4 text-sm resize-y"
+                      placeholder="Напишите что-нибудь..."></textarea>
+            {% if current_user and current_user.get('is_premium') %}
+            <div class="mt-2">
+                <label class="text-xs text-white/60">Прикрепить файл (только премиум)</label>
+                <input type="file" name="attachment" class="text-sm file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:bg-white/10 hover:file:bg-white/20">
+            </div>
+            {% endif %}
+            <div class="flex justify-end mt-3">
+                <button type="submit" class="px-6 py-2 bg-[#e11d48] hover:bg-rose-700 rounded-2xl text-sm font-medium">
+                    Отправить
+                </button>
+            </div>
+        </form>
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-white/50 text-sm">Топик закрыт для новых сообщений.</div>
+    {% endif %}
+    {% else %}
+    <div class="mt-8 text-center py-4">
+        <a href="{{ url_for('main.login') }}" class="text-[#e11d48]">Войдите</a>, чтобы ответить
+    </div>
+    {% endif %}
+</div>
+
+<script>
+async function votePost(postId, vote) {
+    try {
+        const fd = new FormData();
+        fd.append('vote', vote);
+        const res = await fetch(`/forum/post/${postId}/vote`, {
+            method: 'POST',
+            body: fd
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const scoreEl = document.getElementById(`score-${postId}`);
+            if (scoreEl) {
+                scoreEl.textContent = data.score;
+                scoreEl.className = `font-mono px-1 ${data.score > 0 ? 'text-green-400' : data.score < 0 ? 'text-red-400' : 'text-white/50'}`;
+            }
+            // refresh page for my_vote class update, or re-render but simple reload
+            location.reload();
+        }
+    } catch(e) {
+        alert('Ошибка голосования');
+    }
+}
+</script>
+{% endblock %}

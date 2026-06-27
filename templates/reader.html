@@ -1,0 +1,980 @@
+{% extends "base.html" %}
+
+{% block title %}Читалка — {{ manga.title }} • FAKKU{% endblock %}
+
+{% block head %}
+<style>
+    .reader-bg { background: #000; position: relative; }
+    .reader-toolbar {
+        background: linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.6));
+        backdrop-filter: blur(12px);
+    }
+    .reader-image-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: calc(100vh - 56px); /* only toolbar; bottom bar overlays without shifting layout */
+        overflow: hidden;
+        user-select: none;
+        touch-action: pan-x pan-y;
+    }
+
+    .reader-focused .reader-image-container,
+    .reader-image-container.zoomed {
+        touch-action: none;
+    }
+
+    .reader-focused .reader-image-container {
+        height: calc(100vh - 56px);
+    }
+    .reader-image-wrapper {
+        position: relative;
+        transition: transform 0.05s linear;
+        cursor: grab;
+        will-change: transform;
+        backface-visibility: hidden;
+    }
+    .reader-image-wrapper:active { cursor: grabbing; }
+    
+    .reader-image {
+        max-width: 100%;
+        max-height: 100%;
+        display: block;
+        pointer-events: none;
+        box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+        image-rendering: auto;
+    }
+
+    .double-page {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+    }
+    .double-page img {
+        max-height: 100%;
+        max-width: 49%;
+        object-fit: contain;
+    }
+
+    .page-nav {
+        position: absolute;
+        top: 0; bottom: 0;
+        width: 28%;
+        z-index: 20;
+        transition: background .1s;
+        pointer-events: auto;
+    }
+    .page-nav.left { left: 0; }
+    .page-nav.right { right: 0; }
+    .page-nav:hover { background: linear-gradient(to right, rgba(255,255,255,0.015), transparent); }
+    .page-nav.right:hover { background: linear-gradient(to left, rgba(255,255,255,0.015), transparent); }
+
+    .reader-focused #reader-bottom {
+        display: none !important;
+    }
+
+    /* Make bottom bar overlay the content so showing/hiding thumbnails doesn't cause layout shift/jumping of the page image */
+    #reader-bottom {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        pointer-events: none;
+    }
+    #reader-bottom .thumbnails-strip {
+        pointer-events: auto;
+    }
+
+    /* Mobile: top panel removed */
+    @media (hover: none) and (pointer: coarse) {
+        .reader-toolbar {
+            display: none !important;
+        }
+        .reader-image-container {
+            height: 100vh !important;
+        }
+    }
+
+    .thumbnails-strip {
+        scrollbar-width: thin;
+        scrollbar-color: #333 #111;
+    }
+
+    .thumbnails-strip::-webkit-scrollbar {
+        height: 5px;
+    }
+    .thumbnails-strip::-webkit-scrollbar-thumb {
+        background: #444;
+        border-radius: 3px;
+    }
+
+    .thumbnail-item {
+        width: 58px;
+        height: 74px;
+        flex-shrink: 0;
+        border: 3px solid transparent;
+        overflow: hidden;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all .1s cubic-bezier(0.4, 0.0, 0.2, 1);
+    }
+    .thumbnail-item.active {
+        border-color: #e11d48;
+        box-shadow: 0 0 0 1px #e11d48;
+    }
+    .thumbnail-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        image-rendering: auto;
+    }
+
+    /* Larger thumbnails on PC for better visibility in the strip */
+    @media (min-width: 1024px) {
+        .thumbnail-item {
+            width: 80px;
+            height: 102px;
+        }
+    }
+
+    .reader-controls {
+        font-size: 13px;
+    }
+
+    .fit-btn {
+        padding: 6px 13px;
+        font-size: 12px;
+        border-radius: 6px;
+        background: #1a1a1a;
+        transition: all .1s;
+    }
+    .fit-btn.active {
+        background: #e11d48;
+        color: white;
+    }
+
+    .zoom-display {
+        min-width: 52px;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reader-bg text-white h-screen flex flex-col overflow-hidden select-none">
+    <!-- Top toolbar -->
+    <div class="reader-toolbar px-4 h-[56px] flex items-center justify-between z-40 border-b border-white/10 shrink-0">
+        <div class="flex items-center gap-x-4">
+            <a href="/manga/{{ manga.slug }}" class="flex items-center text-white/70 hover:text-white px-3 py-1.5 gap-x-2 rounded-lg hover:bg-white/10 text-sm">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span class="hidden sm:inline">Назад</span>
+            </a>
+            
+            <div class="flex items-center gap-x-2.5">
+                <div class="font-semibold tracking-tight text-lg">{{ manga.title }}</div>
+                <div class="text-xs px-2 py-px bg-white/10 rounded text-white/70">{{ manga.pages_count }} стр.</div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-x-1 reader-controls">
+            <!-- Page indicator -->
+            <div class="font-mono text-sm px-4 py-1 bg-white/5 rounded-full border border-white/10">
+                <span id="page-current">1</span> / <span id="page-total">{{ manga.pages_count }}</span>
+            </div>
+
+            <!-- Direction -->
+            <button onclick="toggleDirection()" id="dir-btn"
+                    class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
+                <i class="fa-solid fa-arrow-right"></i>
+                <span id="dir-label">LTR</span>
+            </button>
+
+            <!-- Modes -->
+            <button onclick="toggleDoublePage()" id="double-btn"
+                    class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
+                <i class="fa-solid fa-columns"></i>
+                <span id="double-label">1 стр.</span>
+            </button>
+            
+            <!-- Fit -->
+            <div class="flex border border-white/10 rounded-xl overflow-hidden text-xs">
+                <button onclick="setFitMode('width')" id="fit-width" class="fit-btn px-3 py-1.5 active">По ширине</button>
+                <button onclick="setFitMode('height')" id="fit-height" class="fit-btn px-3 py-1.5">По высоте</button>
+                <button onclick="setFitMode('original')" id="fit-original" class="fit-btn px-3 py-1.5">Оригинал</button>
+            </div>
+
+            <!-- Zoom -->
+            <div class="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl pl-1 pr-3 text-xs">
+                <button onclick="zoomOut()" class="px-2 py-1 hover:bg-white/10 rounded-l-xl"><i class="fa-solid fa-minus"></i></button>
+                <div id="zoom-level" class="zoom-display font-mono tabular-nums">100%</div>
+                <button onclick="zoomIn()" class="px-2 py-1 hover:bg-white/10 rounded-r-xl"><i class="fa-solid fa-plus"></i></button>
+                <button onclick="resetZoom()" class="pl-2 text-[11px] opacity-70 hover:opacity-100">RESET</button>
+            </div>
+
+            <button onclick="window.location.href='/manga/{{ manga.slug }}'" 
+                    class="px-3 py-1.5 hover:bg-white/10 rounded-xl text-sm flex items-center gap-x-1 border border-white/10">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main viewer -->
+    <div id="viewer" class="reader-image-container flex-1 relative" style="background:#000;">
+        <!-- Click zones (JS attached, disabled when zoomed) -->
+        <div class="page-nav left"></div>
+        <div class="page-nav right"></div>
+
+        <!-- Image(s) container -->
+        <div id="image-wrapper" class="reader-image-wrapper flex items-center justify-center" style="transform: scale(1) translate(0, 0);">
+            <!-- JS injects images here -->
+        </div>
+    </div>
+
+    <!-- Bottom bar: Progress + Thumbnails -->
+    <div class="bg-[#0a0a0a] border-t border-white/10 shrink-0 z-40" id="reader-bottom">
+        <!-- Progress -->
+        <div class="h-0.5 bg-white/10 relative">
+            <div id="progress-bar" class="h-full bg-[#e11d48] transition-all" style="width: 0%"></div>
+        </div>
+
+        <!-- Thumbnails -->
+        <div class="px-4 py-3 overflow-x-auto thumbnails-strip flex gap-2" id="thumbnails">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MANGA_SLUG = "{{ manga.slug }}";
+const TOTAL_PAGES = {{ manga.pages_count }};
+let pages = [];      // full size URLs (for main viewer)
+let pagesThumb = [];   // thumb URLs for strip (falls back to full)
+let currentPage = 1; // 1-based
+let isDouble = false;
+let direction = 'ltr'; // ltr or rtl
+let fitMode = 'width';
+let zoomLevel = 1;
+let panX = 0, panY = 0;
+let isDragging = false;
+let dragStartX = 0, dragStartY = 0, startPanX = 0, startPanY = 0;
+let isFocused = false;
+
+let pinchInitialDist = 0;
+let pinchInitialZoom = 1;
+let pinchCenterX = 0;
+let pinchCenterY = 0;
+
+let bottomVisible = false;
+let isTouchDevice = false;
+
+let hideBottomTimeout = null;
+const BOTTOM_HIDE_DELAY = 1500; // 1.5 секунды — лента исчезает после бездействия мыши
+
+let lastSingleTouchX = 0;
+let lastSingleTouchY = 0;
+
+async function loadMangaData() {
+    const res = await fetch(`/api/manga/${MANGA_SLUG}`);
+    const data = await res.json();
+    pages = data.pages || [];                    // full size for main viewer
+    pagesThumb = data.pages_thumb || data.pages; // prefer thumbs for the strip
+    if (!pages.length) {
+        alert("Нет страниц");
+        window.location.href = `/manga/${MANGA_SLUG}`;
+        return;
+    }
+    renderThumbnails();
+
+    // Support direct jump via ?page=N
+    const params = new URLSearchParams(window.location.search);
+    const start = parseInt(params.get('page')) || 1;
+    goToPage(start, false);
+}
+
+function getPageUrl(index) { // 0-based
+    return pages[index];
+}
+
+function renderThumbnails() {
+    const container = document.getElementById('thumbnails');
+    container.innerHTML = '';
+    
+    const thumbList = pagesThumb.length ? pagesThumb : pages;
+    thumbList.forEach((url, idx) => {
+        const div = document.createElement('div');
+        div.className = `thumbnail-item ${idx + 1 === currentPage ? 'active' : ''}`;
+        div.innerHTML = `<img src="${url}" loading="lazy" alt="стр ${idx+1}">`;
+        div.onclick = () => goToPage(idx + 1);
+        container.appendChild(div);
+    });
+}
+
+function updateUI() {
+    // Page number
+    document.getElementById('page-current').innerText = currentPage;
+    document.getElementById('page-total').innerText = TOTAL_PAGES;
+
+    // Progress
+    const progress = ((currentPage - 1) / (TOTAL_PAGES - 1)) * 100 || 0;
+    document.getElementById('progress-bar').style.width = `${progress}%`;
+
+    // Thumbnails highlight
+    document.querySelectorAll('#thumbnails .thumbnail-item').forEach((el, i) => {
+        el.classList.toggle('active', (i + 1) === currentPage);
+        if ((i + 1) === currentPage) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        }
+    });
+
+    // Labels
+    document.getElementById('double-label').innerText = isDouble ? '2 стр.' : '1 стр.';
+    document.getElementById('dir-label').innerText = direction.toUpperCase();
+}
+
+function renderCurrentImage() {
+    const wrapper = document.getElementById('image-wrapper');
+    wrapper.innerHTML = '';
+    wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+    
+    const idx = currentPage - 1;
+    
+    if (isDouble) {
+        // Double page
+        wrapper.classList.add('double-page');
+        
+        let leftIdx = idx;
+        let rightIdx = idx + 1;
+        if (rightIdx >= pages.length) rightIdx = leftIdx;
+        
+        if (direction === 'rtl') {
+            let tmp = leftIdx; leftIdx = rightIdx; rightIdx = tmp;
+        }
+        
+        const img1 = document.createElement('img');
+        img1.className = 'reader-image';
+        img1.src = getPageUrl(leftIdx);
+        img1.decoding = 'async';
+        img1.fetchPriority = 'high';
+        
+        const img2 = document.createElement('img');
+        img2.className = 'reader-image';
+        img2.src = getPageUrl(rightIdx);
+        img2.decoding = 'async';
+        if (leftIdx === rightIdx) img2.fetchPriority = 'high';
+        
+        wrapper.appendChild(img1);
+        if (leftIdx !== rightIdx) wrapper.appendChild(img2);
+    } else {
+        wrapper.classList.remove('double-page');
+        const img = document.createElement('img');
+        img.className = 'reader-image';
+        img.src = getPageUrl(idx);
+        img.decoding = 'async';
+        img.fetchPriority = 'high';
+        wrapper.appendChild(img);
+    }
+    
+    applyFit();
+    updateUI();
+}
+
+function applyFit() {
+    const wrapper = document.getElementById('image-wrapper');
+    const imgs = wrapper.querySelectorAll('img');
+    
+    imgs.forEach(img => {
+        img.style.maxWidth = '';
+        img.style.maxHeight = '';
+        img.style.width = '';
+        img.style.height = '';
+        
+        if (fitMode === 'width') {
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = '100vh';
+            img.style.width = 'auto';
+            img.style.height = 'auto';
+        } else if (fitMode === 'height') {
+            img.style.maxHeight = 'calc(100vh - 110px)';
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            img.style.width = 'auto';
+        } else {
+            // original
+            img.style.maxWidth = 'none';
+            img.style.maxHeight = 'none';
+        }
+    });
+}
+
+function setFitMode(mode) {
+    fitMode = mode;
+    document.querySelectorAll('.fit-btn').forEach(b => b.classList.remove('active'));
+    
+    if (mode === 'width') document.getElementById('fit-width').classList.add('active');
+    else if (mode === 'height') document.getElementById('fit-height').classList.add('active');
+    else document.getElementById('fit-original').classList.add('active');
+    
+    const wrapper = document.getElementById('image-wrapper');
+    // reset zoom + pan when changing fit mode
+    zoomLevel = 1;
+    panX = 0; panY = 0;
+    wrapper.style.transform = `scale(1) translate(0,0)`;
+    
+    updateFocusOnZoom();
+    updateNavigationZones();
+    applyFit();
+}
+
+function goToPage(page, animate = true) {
+    if (page < 1) page = 1;
+    if (page > TOTAL_PAGES) page = TOTAL_PAGES;
+    if (page === currentPage && animate) return;
+    
+    currentPage = page;
+    renderCurrentImage();
+
+    // Preload several pages ahead immediately (prevents black flash on fast flip)
+    setTimeout(preloadAdjacent, 30);
+
+    // Track progress for logged in users
+    if (window.CURRENT_USER_ID && TOTAL_PAGES > 0) {
+        fetch('/api/progress', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                manga_id: {{ manga.id if manga.id is defined else 0 }},
+                last_page: currentPage,
+                total: TOTAL_PAGES
+            })
+        }).catch(() => {});
+    }
+}
+
+function nextPage() {
+    let next = currentPage + (isDouble ? 2 : 1);
+    if (next > TOTAL_PAGES) next = TOTAL_PAGES;
+    goToPage(next);
+    // Extra preload forward for fast paging
+    setTimeout(() => {
+        const idx = next - 1;
+        preloadPages(idx, idx + (isDouble ? 6 : 5));
+    }, 50);
+}
+
+function prevPage() {
+    let prev = currentPage - (isDouble ? 2 : 1);
+    if (prev < 1) prev = 1;
+    goToPage(prev);
+}
+
+function toggleDoublePage() {
+    isDouble = !isDouble;
+    // adjust current page if needed
+    if (isDouble && currentPage % 2 === 0) currentPage -= 1;
+    renderCurrentImage();
+    setTimeout(preloadAdjacent, 50);
+}
+
+function toggleDirection() {
+    direction = (direction === 'ltr') ? 'rtl' : 'ltr';
+    renderCurrentImage();
+}
+
+// ZOOM + PAN
+function updateZoomDisplay() {
+    document.getElementById('zoom-level').innerText = Math.round(zoomLevel * 100) + '%';
+}
+
+function updateFocusOnZoom() {
+  const shouldFocus = zoomLevel > 1.05;
+  if (shouldFocus !== isFocused) {
+    isFocused = shouldFocus;
+    const root = document.documentElement;
+    const bottomBar = document.getElementById('reader-bottom');
+    if (isFocused) {
+      root.classList.add('reader-focused');
+      document.body.style.overflow = 'hidden';
+      if (bottomBar) bottomBar.style.display = 'none';
+    } else {
+      root.classList.remove('reader-focused');
+      document.body.style.overflow = '';
+      // On desktop, let auto-hide logic decide; don't force show here
+    }
+    updateNavigationZones();
+  }
+}
+
+function getDistance(t1, t2) {
+  const dx = t1.clientX - t2.clientX;
+  const dy = t1.clientY - t2.clientY;
+  return Math.hypot(dx, dy);
+}
+
+
+
+function updateNavigationZones() {
+    const navs = document.querySelectorAll('.page-nav');
+    const allowClicks = zoomLevel <= 1.05 && !isFocused;
+    navs.forEach(nav => {
+        nav.style.pointerEvents = allowClicks ? 'auto' : 'none';
+    });
+
+    // Toggle class for CSS touch-action control
+    const containerEl = document.getElementById('viewer');
+    if (containerEl) {
+        containerEl.classList.toggle('zoomed', zoomLevel > 1.05);
+    }
+}
+
+function zoomIn(delta = 0.15) {
+    const wrapper = document.getElementById('image-wrapper');
+    zoomLevel = Math.min(zoomLevel + delta, 4.5);
+    wrapper.style.transitionDuration = '60ms';
+    wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+    updateZoomDisplay();
+    updateFocusOnZoom();
+    updateNavigationZones();
+}
+
+function zoomOut(delta = 0.15) {
+    const wrapper = document.getElementById('image-wrapper');
+    zoomLevel = Math.max(zoomLevel - delta, 0.5);
+    wrapper.style.transitionDuration = '60ms';
+    wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+    updateZoomDisplay();
+    updateFocusOnZoom();
+    updateNavigationZones();
+}
+
+function resetZoom() {
+    const wrapper = document.getElementById('image-wrapper');
+    zoomLevel = 1;
+    panX = 0;
+    panY = 0;
+    wrapper.style.transitionDuration = '120ms';
+    wrapper.style.transform = `scale(1) translate(0, 0)`;
+    updateZoomDisplay();
+    updateFocusOnZoom();
+    updateNavigationZones();
+}
+
+function setupZoomPan() {
+    const container = document.getElementById('viewer');
+    const wrapper = document.getElementById('image-wrapper');
+    
+    // Wheel zoom
+    container.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        const newZoom = Math.max(0.5, Math.min(4.5, zoomLevel + delta));
+        
+        // Zoom toward mouse
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left - rect.width / 2;
+        const mouseY = e.clientY - rect.top - rect.height / 2;
+        
+        const scaleFactor = newZoom / zoomLevel;
+        panX = panX * scaleFactor + mouseX * (1 - scaleFactor);
+        panY = panY * scaleFactor + mouseY * (1 - scaleFactor);
+        
+        zoomLevel = newZoom;
+        wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+        updateZoomDisplay();
+        updateFocusOnZoom();
+        updateNavigationZones();
+    }, { passive: false });
+
+    // Drag to pan - attach to viewer container so it works even when image is panned to edges
+    const viewerEl = document.getElementById('viewer');
+    viewerEl.addEventListener('mousedown', function(e) {
+        if (zoomLevel <= 1.05) return;
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        startPanX = panX;
+        startPanY = panY;
+        wrapper.style.transitionDuration = '0ms';
+        e.preventDefault();
+    });
+
+    // Prevent browser default touch behaviors (scroll, pinch zoom) that cause jerking
+    // especially on mobile when zoomed or in focus mode
+    container.addEventListener('touchmove', (e) => {
+        if (zoomLevel > 1.05 || isFocused) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    // Pinch-to-zoom for mobile
+    const imageWrapper = document.getElementById('image-wrapper');
+    imageWrapper.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            pinchInitialDist = getDistance(e.touches[0], e.touches[1]);
+            pinchInitialZoom = zoomLevel;
+            const rect = container.getBoundingClientRect();
+            pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - rect.width / 2;
+            pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top - rect.height / 2;
+        } else if (e.touches.length === 1) {
+            lastSingleTouchX = e.touches[0].clientX;
+            lastSingleTouchY = e.touches[0].clientY;
+        }
+    }, {passive: true});
+
+    imageWrapper.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dist = getDistance(e.touches[0], e.touches[1]);
+            let newZoom = pinchInitialZoom * (dist / pinchInitialDist);
+            newZoom = Math.max(0.5, Math.min(4.5, newZoom));
+
+            const factor = newZoom / zoomLevel;
+            panX = (panX - pinchCenterX) * factor + pinchCenterX;
+            panY = (panY - pinchCenterY) * factor + pinchCenterY;
+
+            zoomLevel = newZoom;
+            wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+            updateZoomDisplay();
+            updateFocusOnZoom();
+            updateNavigationZones();
+        } else if (e.touches.length === 1 && zoomLevel > 1.05) {
+            // Single finger pan after zoom on mobile
+            e.preventDefault();
+            const touch = e.touches[0];
+            const dx = touch.clientX - lastSingleTouchX;
+            const dy = touch.clientY - lastSingleTouchY;
+            panX += dx;
+            panY += dy;
+            wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+            lastSingleTouchX = touch.clientX;
+            lastSingleTouchY = touch.clientY;
+        }
+    }, {passive: false});
+
+    // Mobile: tap on image to toggle bottom thumbnails (only after tap)
+    if (isTouchDevice) {
+        let tapX = 0, tapY = 0, moved = false;
+        imageWrapper.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                tapX = e.touches[0].clientX;
+                tapY = e.touches[0].clientY;
+                moved = false;
+            }
+        }, {passive: true});
+
+        imageWrapper.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                const dx = Math.abs(e.touches[0].clientX - tapX);
+                const dy = Math.abs(e.touches[0].clientY - tapY);
+                if (dx > 10 || dy > 10) moved = true;
+            }
+        }, {passive: true});
+
+        imageWrapper.addEventListener('touchend', (e) => {
+            if (!moved) {
+                const bottom = document.getElementById('reader-bottom');
+                if (bottom) {
+                    bottomVisible = !bottomVisible;
+                    bottom.style.display = bottomVisible ? '' : 'none';
+                }
+            }
+        });
+    }
+
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+        panX = startPanX + dx;
+        panY = startPanY + dy;
+        wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
+    });
+
+    document.addEventListener('mouseup', function() {
+        isDragging = false;
+        wrapper.style.transitionDuration = '80ms';
+    });
+
+    // Focus mode now auto-enters when zooming in (zoomLevel > 1.05).
+    // It stays on during swipes/pinch.
+    // Exit with double tap or by zooming back to original size.
+
+    // Attach nav clicks with zoom check (in addition to pointer-events)
+    const leftNav = document.querySelector('.page-nav.left');
+    const rightNav = document.querySelector('.page-nav.right');
+    if (leftNav) {
+        leftNav.addEventListener('click', (e) => {
+            if (zoomLevel > 1.05 || isFocused) {
+                e.stopImmediatePropagation();
+                return;
+            }
+            prevPage();
+        });
+    }
+    if (rightNav) {
+        rightNav.addEventListener('click', (e) => {
+            if (zoomLevel > 1.05 || isFocused) {
+                e.stopImmediatePropagation();
+                return;
+            }
+            nextPage();
+        });
+    }
+
+    // Mobile: tap on image to toggle bottom thumbnails (appears only after tap)
+    if (isTouchDevice) {
+        let tapX = 0, tapY = 0, moved = false;
+        const iw = document.getElementById('image-wrapper');
+        iw.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                tapX = e.touches[0].clientX;
+                tapY = e.touches[0].clientY;
+                moved = false;
+            }
+        }, {passive: true});
+
+        iw.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 1) {
+                const dx = Math.abs(e.touches[0].clientX - tapX);
+                const dy = Math.abs(e.touches[0].clientY - tapY);
+                if (dx > 10 || dy > 10) moved = true;
+            }
+        }, {passive: true});
+
+        iw.addEventListener('touchend', (e) => {
+            if (!moved) {
+                const bottom = document.getElementById('reader-bottom');
+                if (bottom) {
+                    bottomVisible = !bottomVisible;
+                    bottom.style.display = bottomVisible ? '' : 'none';
+                }
+            }
+        });
+    }
+}
+
+function setupKeyboard() {
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === ' ') {
+            e.preventDefault();
+            nextPage();
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'a') {
+            e.preventDefault();
+            prevPage();
+        }
+        if (e.key.toLowerCase() === 'f') {
+            setFitMode(fitMode === 'width' ? 'height' : 'width');
+        }
+        if (e.key === 'Escape') {
+            window.location.href = `/manga/${MANGA_SLUG}`;
+        }
+        if (e.key === '+' || e.key === '=') zoomIn(0.2);
+        if (e.key === '-') zoomOut(0.2);
+        if (e.key.toLowerCase() === 'r') resetZoom();
+        if (e.key.toLowerCase() === '2') toggleDoublePage();
+        if (e.key === '?') toggleDirection();
+        
+        // number keys jump
+        if (/^[0-9]$/.test(e.key)) {
+            const target = parseInt(e.key);
+            if (target >= 1 && target <= 9) {
+                const p = Math.floor((TOTAL_PAGES - 1) * (target / 9)) + 1;
+                goToPage(p);
+            }
+        }
+    });
+    
+    // Double tap on image:
+    // - If in focus mode (zoomed), exit focus mode
+    // - Otherwise, cycle fit modes
+    const wrapper = document.getElementById('image-wrapper');
+    wrapper.addEventListener('dblclick', () => {
+        if (isFocused) {
+            isFocused = false;
+            document.documentElement.classList.remove('reader-focused');
+            const bottomBar = document.getElementById('reader-bottom');
+            const thumbs = document.getElementById('thumbnails');
+            if (bottomBar) bottomBar.style.display = '';
+            if (thumbs) thumbs.style.display = 'flex';
+            document.body.style.overflow = '';
+            bottomVisible = true;
+            // On desktop, briefly show thumbnails strip then let auto-hide (1.5s) kick in
+            if (!isTouchDevice) {
+              if (hideBottomTimeout) clearTimeout(hideBottomTimeout);
+              hideBottomTimeout = setTimeout(() => {
+                if (!isFocused) {
+                  if (thumbs) thumbs.style.display = 'none';
+                  bottomVisible = false;
+                }
+              }, BOTTOM_HIDE_DELAY);
+            }
+            updateFocusOnZoom();
+            updateNavigationZones();
+        } else {
+            const modes = ['width', 'height', 'original'];
+            let i = modes.indexOf(fitMode);
+            setFitMode(modes[(i + 1) % modes.length]);
+        }
+    });
+
+    // Ensure nav zones state is correct after everything
+    updateNavigationZones();
+}
+
+function preloadPages(startIdx, endIdx) {
+    // 0-based indices - preload several pages ahead to avoid black flash on fast paging
+    for (let i = startIdx; i <= endIdx; i++) {
+        if (i < 0 || i >= pages.length) continue;
+        const url = getPageUrl(i);
+        if (!url) continue;
+        // Use a cache of preloaded images to avoid re-creating
+        if (!window._preloaded || !window._preloaded[url]) {
+            const img = new Image();
+            img.src = url;
+            window._preloaded = window._preloaded || {};
+            window._preloaded[url] = img;
+        }
+    }
+}
+
+function preloadAdjacent() {
+    // Preload several pages ahead (user complaint: fast flipping shows black)
+    // Preload more in the "forward" direction based on current double/single mode
+    const ahead = isDouble ? 5 : 4;   // several ahead
+    const behind = 2;
+
+    const idx = currentPage - 1;  // 0-based
+
+    // Always preload current + ahead
+    preloadPages(idx, idx + ahead);
+
+    // Some behind for quick back
+    preloadPages(idx - behind, idx);
+
+    // For double page mode, ensure the pair is covered
+    if (isDouble) {
+        preloadPages(idx + 1, idx + 1 + ahead);
+    }
+}
+
+function initReader() {
+    window.CURRENT_USER_ID = {% if current_user %}{{ current_user.id }}{% else %}null{% endif %};
+    isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+    loadMangaData().then(() => {
+        // Default fit width
+        document.getElementById('fit-width').classList.add('active');
+        
+        // Aggressive initial preload forward
+        setTimeout(() => {
+            preloadPages(0, Math.min(6, pages.length - 1));  // first few
+            preloadAdjacent();
+        }, 100);
+        
+        if (isTouchDevice) {
+            // Hide entire top panel in mobile
+            const toolbar = document.querySelector('.reader-toolbar');
+            if (toolbar) toolbar.style.display = 'none';
+
+            // Bottom hidden by default, shown only after tap
+            const bottomBar = document.getElementById('reader-bottom');
+            if (bottomBar) bottomBar.style.display = 'none';
+
+            // Fit page to screen, prevent vertical scroll
+            const container = document.getElementById('viewer');
+            if (container) {
+                container.style.height = '100vh';
+            }
+            document.documentElement.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden';
+
+            // Default fit to width for mobile
+            setFitMode('width');
+        } else {
+            // Desktop: auto-hide the thumbnails strip (лента страниц) after mouse inactivity.
+            // The thin progress line stays. Reappears on mouse movement.
+            // Does not affect mobile tap behavior.
+            const thumbnailsStrip = document.getElementById('thumbnails');
+            const bottomBar = document.getElementById('reader-bottom');
+
+            function showThumbnails() {
+              if (thumbnailsStrip && !isFocused) {
+                thumbnailsStrip.style.display = 'flex';
+              }
+              if (bottomBar && !isFocused) {
+                bottomBar.style.display = '';
+              }
+              if (hideBottomTimeout) {
+                clearTimeout(hideBottomTimeout);
+                hideBottomTimeout = null;
+              }
+              bottomVisible = true;
+            }
+
+            function scheduleHideThumbnails() {
+              if (hideBottomTimeout) clearTimeout(hideBottomTimeout);
+              if (isFocused || !thumbnailsStrip) return;
+              hideBottomTimeout = setTimeout(() => {
+                if (!isFocused) {
+                  thumbnailsStrip.style.display = 'none';
+                  bottomVisible = false;
+                }
+              }, BOTTOM_HIDE_DELAY);
+            }
+
+            // Start hidden (only thin progress line visible at bottom). 
+            // The thumbnails strip appears only on mouse move and auto-hides.
+            if (thumbnailsStrip) thumbnailsStrip.style.display = 'none';
+            // No forced show on load or page changes.
+
+            // Show thumbnails on mouse move (desktop)
+            document.addEventListener('mousemove', () => {
+              if (isFocused) return;
+              showThumbnails();
+              scheduleHideThumbnails();
+            });
+
+            // Keep visible while hovering the whole bottom area
+            if (bottomBar) {
+              bottomBar.addEventListener('mouseenter', () => {
+                if (hideBottomTimeout) {
+                  clearTimeout(hideBottomTimeout);
+                  hideBottomTimeout = null;
+                }
+              });
+              bottomBar.addEventListener('mouseleave', () => {
+                if (!isFocused) scheduleHideThumbnails();
+              });
+            }
+        }
+        
+        setupZoomPan();
+        setupKeyboard();
+        
+        updateNavigationZones();
+        
+        // Initial forward preload (already done above, but ensure)
+        setTimeout(preloadAdjacent, 300);
+        
+        // Click hints
+        const viewer = document.getElementById('viewer');
+        viewer.title = "Клик слева / справа — листать • Колесо — зум • Двойной клик по картинке — смена режима";
+    });
+    
+    // Bonus: Arrow keys always active
+    window.addEventListener('focus', () => {});
+}
+
+// Boot
+document.addEventListener('DOMContentLoaded', initReader);
+
+// Expose some debug
+window.FAKKU_READER = { goToPage, nextPage, prevPage, toggleDoublePage, setFitMode };
+</script>
+{% endblock %}

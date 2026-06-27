@@ -1,0 +1,645 @@
+{% extends "base.html" %}
+
+{% block title %}{{ manga.title }} • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-2xl mx-auto px-5 pt-8 pb-16">
+    <div class="flex flex-col lg:flex-row gap-9">
+        
+        <!-- Cover -->
+        <div class="lg:w-[360px] flex-shrink-0 relative z-10">
+            <div class="rounded-3xl overflow-hidden border border-white/10 shadow-xl">
+                <img src="{{ manga.cover }}" 
+                     alt="{{ manga.title }}"
+                     class="manga-cover w-full aspect-[3/4] object-cover"
+                     onerror="this.src='https://picsum.photos/id/1011/300/400'">
+            </div>
+            
+            <!-- Quick actions -->
+            <div class="mt-8 flex flex-wrap gap-3 bg-zinc-900 rounded-xl p-2">
+                <a href="/read/{{ manga.slug }}" 
+                   class="flex-1 fakku-btn flex items-center justify-center gap-x-3 rounded-2xl py-4 font-semibold text-base cursor-pointer">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Читать мангу</span>
+                </a>
+
+                {% if current_user %}
+                <button onclick="toggleFavorite({{ manga.id }})"
+                        class="px-4 flex items-center gap-x-2 rounded-2xl border text-sm font-medium cursor-pointer {{ 'bg-[#e11d48] text-white border-[#e11d48]' if manga.is_favorite else 'bg-white/5 hover:bg-white/10 border-white/10' }}"
+                        id="fav-btn">
+                    <i class="fa-solid fa-heart"></i>
+                    <span class="hidden sm:inline">Избранное</span>
+                </button>
+
+                <button id="read-btn" onclick="toggleReadStatus({{ manga.id }}, {{ 1 if manga.is_read else 0 }})"
+                        class="px-4 flex items-center gap-x-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium cursor-pointer">
+                    <i class="fa-solid fa-check"></i>
+                    <span class="hidden sm:inline">{{ 'Отметить непрочитанной' if manga.is_read else 'Отметить прочитанной' }}</span>
+                </button>
+                {% endif %}
+
+                {% if current_user and current_user.get('is_premium') %}
+                <a href="/download/{{ manga.slug }}" 
+                   class="px-4 flex items-center gap-x-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-sm font-medium cursor-pointer">
+                    <i class="fa-solid fa-download"></i>
+                    <span class="hidden sm:inline">Скачать</span>
+                </a>
+                {% endif %}
+            </div>
+
+            {% if current_user and current_user.get('is_admin') %}
+            <!-- Admin edit button - dedicated to ensure it has its own hit area in the left column -->
+            <div class="mt-2 flex justify-end select-none">
+                <button onclick="showEditModal()"
+                        class="px-5 py-1.5 flex items-center gap-x-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium cursor-pointer relative z-30 pointer-events-auto"
+                        title="Редактировать (админ)">
+                    <i class="fa-solid fa-edit"></i>
+                    <span class="hidden sm:inline">Править</span>
+                </button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Meta -->
+        <div class="flex-1 min-w-0">
+            <div class="mb-1">
+                <div class="uppercase tracking-[2.5px] text-[10px] text-[#e11d48] font-semibold">ХЕНТАЙ МАНГА</div>
+            </div>
+            
+            <h1 class="text-5xl tracking-tighter font-semibold leading-none mb-3">{{ manga.title }}</h1>
+            
+            {% if manga.author %}
+            <div class="text-sm text-white/60 mb-4">Автор: <a href="/?q={{ manga.author | urlencode }}" class="text-white font-medium hover:text-[#e11d48]">{{ manga.author }}</a></div>
+            {% endif %}
+            
+            <!-- Stats -->
+            <div class="flex items-center gap-x-5 text-sm mb-5">
+                <div class="flex items-center gap-x-2">
+                    <div class="flex text-3xl cursor-pointer" id="rating-stars" title="Нажми на звезду, чтобы оценить. Нажми повторно на ту же звезду — чтобы отменить оценку.">
+                        {% for i in range(1,6) %}
+                        <i class="fa-solid fa-star px-0.5 transition {{ 'text-[#f59e0b]' if manga.rating >= i - 0.5 else 'text-white/20' }}" 
+                           data-value="{{ i }}" onclick="rateByStar({{ i }})"></i>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        <span class="font-semibold text-lg" id="rating-value">{{ '%.1f'|format(manga.rating) }}</span>
+                        <span class="text-white/40 text-xs" id="rating-count">({{ manga.rating_count }} оценок)</span>
+                        {% if current_user %}
+                        <span id="my-rating-badge" class="ml-2 text-xs px-1.5 py-0.5 bg-white/10 rounded" {% if not manga.my_rating %}style="display:none"{% endif %}>
+                            {% if manga.my_rating %}Ваша: {{ manga.my_rating }}★{% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-1 text-white/60">
+                    <i class="fa-solid fa-file"></i>
+                    <span>{{ manga.pages_count }} страниц</span>
+                </div>
+
+                {% if current_user %}
+                <div class="flex items-center gap-1 text-white/60">
+                    <span id="read-status" class="{{ 'text-emerald-400' if manga.is_read else '' }}">
+                        {% if manga.is_read %}
+                        <i class="fa-solid fa-check"></i> Прочитано
+                        {% else %}
+                        Не прочитано
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Tags -->
+            {% if manga.tags %}
+            <div class="mb-7">
+                <div class="uppercase text-xs tracking-widest font-semibold text-white/50 mb-2">Теги</div>
+                <div class="flex flex-wrap gap-2">
+                    {% for tag in manga.tags %}
+                    <a href="/?tag={{ tag|urlencode }}" class="tag-pill px-4 py-1 text-sm cursor-pointer">{{ tag }}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Description -->
+            <div>
+                <div class="uppercase text-xs tracking-widest font-semibold text-white/50 mb-1.5">Описание</div>
+                {% if manga.description %}
+                <p class="text-white/90 leading-relaxed max-w-prose text-[15px]">
+                    {{ manga.description }}
+                </p>
+                {% else %}
+                <p class="italic text-white/40">Описание отсутствует.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Pages grid - moved below the two-column layout so it doesn't overlap buttons -->
+    {% if manga.pages %}
+    <div class="mt-20">
+        <div class="uppercase text-xs tracking-widest font-semibold text-white/50 mb-2">Страницы (кликни, чтобы открыть)</div>
+        <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+            {% for p in manga.pages %}
+            {% set idx = loop.index %}
+            <a href="/read/{{ manga.slug }}?page={{ idx }}" class="group block">
+                <div class="relative rounded-md overflow-hidden border border-white/10 group-hover:border-[#e11d48] transition-all">
+                    <img src="{{ p }}" 
+                         class="w-full aspect-[3/4] object-cover bg-zinc-900"
+                         loading="lazy"
+                         onerror="this.src='https://picsum.photos/id/1011/120/160'">
+                    <div class="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-mono px-1 rounded">
+                        {{ idx }}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-8 pt-6 border-t border-white/10 text-xs text-white/50">
+        Нажмите «Читать мангу», чтобы открыть высококачественную читалку
+    </div>
+
+    <!-- Comments -->
+    <div class="mt-10 pt-6 border-t border-white/10" id="comments-section">
+        <h2 class="text-xl font-semibold mb-4">Комментарии</h2>
+        {% if current_user and current_user.get('is_admin') %}
+        <p class="text-xs text-red-400 mb-2">Вы администратор — можете удалять любые комментарии.</p>
+        {% endif %}
+
+        {% if current_user %}
+        <form id="comment-form" class="mb-6">
+            <textarea id="comment-text" class="w-full bg-zinc-900 border border-white/10 rounded-2xl p-3 text-sm resize-y min-h-[80px]" placeholder="Напишите комментарий..." required></textarea>
+            <button type="submit" class="mt-2 px-4 py-2 bg-[#e11d48] hover:bg-[#be123c] rounded-xl text-sm font-medium">Отправить</button>
+        </form>
+        {% else %}
+        <p class="text-sm text-white/50 mb-4">Войдите, чтобы оставить комментарий.</p>
+        {% endif %}
+
+        <div id="comments-list" class="space-y-4">
+            {% for c in comments %}
+            <div class="bg-[#111] rounded-2xl p-4 border border-white/5" data-comment-id="{{ c.id }}">
+                <div class="flex items-center gap-2 mb-2">
+                    {% if c.avatar %}
+                    <img src="/uploads/avatars/{{ c.avatar }}" class="w-6 h-6 rounded-full object-cover" onerror="this.src='https://picsum.photos/id/1011/24/24'">
+                    {% endif %}
+                    <span style="color: {{ c.username_color or '#e11d48' }}" class="font-medium text-sm">{{ c.username }}</span>
+                    <span class="text-[10px] text-white/40">{{ c.created_at[:16] if c.created_at else '' }}</span>
+                    {% if current_user and (current_user.get('is_admin') or current_user.get('id') == c.user_id) %}
+                    <button onclick="deleteComment({{ c.id }})" class="ml-auto text-xs px-2 py-0.5 bg-red-900/40 hover:bg-red-900 text-red-400 rounded flex items-center gap-1" title="{{ 'Удалить как админ' if current_user.get('is_admin') else 'Удалить свой комментарий' }}">
+                        <i class="fa-solid fa-trash"></i> <span>Удалить</span>
+                    </button>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-white/90 whitespace-pre-wrap">{{ c.content }}</p>
+            </div>
+            {% endfor %}
+            {% if not comments %}
+            <p class="text-white/40 text-sm">Пока нет комментариев. Будьте первым!</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Edit Manga Modal -->
+<div id="edit-modal" 
+     class="hidden fixed inset-0 z-[95] bg-black/90 items-center justify-center p-4">
+    <div class="bg-[#111] w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden" onclick="event.stopImmediatePropagation()">
+        <div class="px-6 py-4 flex items-center justify-between border-b border-white/10">
+            <div>
+                <span class="font-semibold text-lg">Редактировать мангу</span>
+                <span class="ml-2 text-xs text-white/50 font-mono">{{ manga.slug }}</span>
+            </div>
+            <button onclick="hideEditModal()" class="text-2xl text-white/50 hover:text-white leading-none">&times;</button>
+        </div>
+
+        <div class="p-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <!-- Left: Metadata -->
+            <div class="lg:col-span-3 space-y-4">
+                <form id="edit-form" onsubmit="submitEdit(event)">
+                    <input type="hidden" name="slug" value="{{ manga.slug }}">
+
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Пароль админа</label>
+                        <input type="password" name="password" value="admin123" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#e11d48]">
+                    </div>
+
+                    <div class="pt-3">
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Название</label>
+                        <input type="text" name="title" id="edit-title" value="{{ manga.title }}" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Автор</label>
+                        <input type="text" name="author" id="edit-author" value="{{ manga.author or '' }}" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Описание</label>
+                        <textarea name="description" id="edit-description" rows="4" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm">{{ manga.description or '' }}</textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Теги (через запятую)</label>
+                        <input type="text" name="tags" id="edit-tags" value="{{ manga.tags|join(', ') }}" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Заменить обложку</label>
+                        <input type="file" name="cover" accept="image/*" class="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:bg-white/10 file:text-white">
+                    </div>
+
+                    <div class="pt-1">
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Добавить новые страницы</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <input type="file" name="pages" multiple accept="image/*" class="text-sm w-full">
+                            </div>
+                            <div>
+                                <input type="file" name="zipfile" accept=".zip,.cbz" class="text-sm w-full">
+                                <div class="text-[10px] text-white/40 mt-0.5">Или ZIP/CBZ</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 flex gap-3">
+                        <button type="button" onclick="hideEditModal()" 
+                                class="flex-1 py-3 rounded-2xl bg-white/5 hover:bg-white/10 text-sm font-medium">Отмена</button>
+                        <button type="submit" 
+                                class="flex-1 py-3 rounded-2xl bg-[#e11d48] text-sm font-semibold">Сохранить</button>
+                    </div>
+                    <div id="edit-status" class="text-center text-xs pt-2 text-white/60 h-4"></div>
+                </form>
+            </div>
+
+            <!-- Right: Current pages + delete -->
+            <div class="lg:col-span-2">
+                <div class="text-xs uppercase tracking-wider text-white/60 mb-2 flex justify-between">
+                    <span>Страницы ({{ manga.pages_count }})</span>
+                    <span id="edit-pages-count" class="font-mono"></span>
+                </div>
+
+                <div id="pages-list" 
+                     class="max-h-[280px] overflow-y-auto bg-black/40 border border-white/10 rounded-2xl p-2 text-sm grid grid-cols-2 gap-2">
+                    <!-- Populated by JS -->
+                </div>
+
+                <div class="text-[10px] text-white/40 mt-2">
+                    Нажмите × чтобы удалить страницу
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MANGA_ID = {{ manga.id }};
+const MANGA_SLUG = "{{ manga.slug }}";
+
+// Track current personal rating for toggle-to-cancel
+let myCurrentRating = {{ manga.my_rating or 0 }};
+
+// Direct star rating (no modal). Click same star again to cancel.
+async function rateByStar(score) {
+    let newScore = score;
+    if (myCurrentRating === score) {
+        newScore = 0; // cancel / remove rating
+    }
+
+    try {
+        const res = await fetch('/api/rate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: MANGA_ID, score: newScore })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            // Update average and count
+            const valEl = document.getElementById('rating-value');
+            const cntEl = document.getElementById('rating-count');
+            if (valEl) valEl.textContent = data.rating.toFixed(1);
+            if (cntEl) cntEl.textContent = `(${data.count} оценок)`;
+
+            // Update star colors based on new average
+            updateStarColors(data.rating);
+
+            // Update personal "Ваша оценка" badge immediately
+            myCurrentRating = data.my_score || 0;
+            updateMyRatingBadge(myCurrentRating);
+        } else {
+            alert(data.error || 'Ошибка при сохранении оценки');
+        }
+    } catch (e) {
+        alert('Ошибка сети');
+    }
+}
+
+function updateStarColors(rating) {
+    const stars = document.querySelectorAll('#rating-stars i');
+    stars.forEach((star, index) => {
+        const val = index + 1;
+        if (rating >= val - 0.5) {
+            star.classList.add('text-[#f59e0b]');
+            star.classList.remove('text-white/20');
+        } else {
+            star.classList.remove('text-[#f59e0b]');
+            star.classList.add('text-white/20');
+        }
+    });
+}
+
+function updateMyRatingBadge(score) {
+    const badge = document.getElementById('my-rating-badge');
+    if (!badge) return;
+
+    if (score && score > 0) {
+        badge.textContent = `Ваша: ${score}★`;
+        badge.style.display = 'inline';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+
+// Keyboard shortcut for read
+document.addEventListener('keydown', function(e) {
+    if (e.key.toLowerCase() === 'r' && document.activeElement.tagName === "BODY") {
+        window.location = '/read/' + MANGA_SLUG;
+    }
+});
+
+// ===================== EDIT MODAL =====================
+let rawPagesCache = [];
+
+function showEditModal() {
+    {% if current_user and current_user.get('is_admin') %}
+    const modal = document.getElementById('edit-modal');
+    if (!modal) {
+        alert('Ошибка: окно редактирования не найдено. Обновите страницу.');
+        return;
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    // Load fresh data from API (async)
+    loadEditData();
+    {% else %}
+    alert('Доступно только администраторам. Активируйте админку в профиле.');
+    {% endif %}
+}
+
+function hideEditModal() {
+    const modal = document.getElementById('edit-modal');
+    if (!modal) return;
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+
+    const status = document.getElementById('edit-status');
+    if (status) status.innerHTML = '';
+}
+
+async function loadEditData() {
+    const status = document.getElementById('edit-status');
+    if (status) status.innerHTML = 'Загрузка...';
+
+    try {
+        const res = await fetch('/api/manga/' + MANGA_SLUG);
+        const data = await res.json();
+
+        const titleEl = document.getElementById('edit-title');
+        const descEl = document.getElementById('edit-description');
+        const tagsEl = document.getElementById('edit-tags');
+        const container = document.getElementById('pages-list');
+
+        if (titleEl) titleEl.value = data.title || '';
+        const authorEl = document.getElementById('edit-author');
+        if (authorEl) authorEl.value = data.author || '';
+        if (descEl) descEl.value = data.description || '';
+        if (tagsEl) tagsEl.value = (data.tags || []).join(', ');
+
+        rawPagesCache = data.raw_pages || [];
+        if (container) {
+            renderPagesList(container);
+        }
+
+        if (status) status.innerHTML = '';
+    } catch (e) {
+        if (status) status.innerHTML = 'Ошибка загрузки данных (проверьте консоль)';
+        console.error('loadEditData error:', e);
+    }
+}
+
+async function loadPagesForEdit() {
+    // legacy wrapper - now handled by loadEditData
+    const container = document.getElementById('pages-list');
+    if (rawPagesCache.length) {
+        renderPagesList(container);
+    } else {
+        await loadEditData();
+    }
+}
+
+function renderPagesList(container) {
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (!rawPagesCache.length) {
+        container.innerHTML = '<div class="col-span-2 text-white/40 p-3 text-xs">Нет страниц</div>';
+        return;
+    }
+
+    rawPagesCache.forEach((fname, idx) => {
+        const div = document.createElement('div');
+        div.className = 'flex items-center gap-2 bg-zinc-950 border border-white/10 rounded-xl px-2 py-1 text-xs';
+
+        const num = (idx + 1).toString().padStart(2, '0');
+        div.innerHTML = `
+            <div class="font-mono text-white/50 w-5">${num}</div>
+            <div class="flex-1 truncate">${fname}</div>
+            <button class="text-red-400 hover:text-red-500 px-1" title="Удалить страницу">×</button>
+        `;
+
+        // Delete handler
+        div.querySelector('button').onclick = async () => {
+            if (!confirm(`Удалить страницу ${fname}?`)) return;
+
+            const pass = prompt('Пароль администратора:', 'admin123');
+            if (!pass) return;
+
+            const fd = new FormData();
+            fd.append('slug', MANGA_SLUG);
+            fd.append('page', fname);
+            fd.append('password', pass);
+
+            try {
+                const r = await fetch('/api/delete_page', { method: 'POST', body: fd });
+                const j = await r.json();
+                if (j.ok) {
+                    rawPagesCache.splice(idx, 1);
+                    renderPagesList(container);
+                    // also update the count in header if present
+                    const cntEl = document.getElementById('edit-pages-count');
+                    if (cntEl) cntEl.textContent = rawPagesCache.length;
+                } else {
+                    alert(j.error || 'Ошибка удаления');
+                }
+            } catch (err) {
+                alert('Ошибка сети');
+            }
+        };
+
+        container.appendChild(div);
+    });
+
+    const cnt = document.getElementById('edit-pages-count');
+    if (cnt) cnt.textContent = rawPagesCache.length;
+}
+
+async function submitEdit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('edit-status');
+    status.innerHTML = 'Сохраняем...';
+
+    const buttons = form.querySelectorAll('button');
+    buttons.forEach(b => b.disabled = true);
+
+    const fd = new FormData(form);
+
+    try {
+        const resp = await fetch('/api/edit_manga', {
+            method: 'POST',
+            body: fd
+        });
+        const json = await resp.json();
+
+        if (resp.ok && json.ok) {
+            status.innerHTML = `<span class="text-emerald-400">Готово! Обновляем страницу...</span>`;
+            setTimeout(() => {
+                window.location.reload();
+            }, 700);
+        } else {
+            status.innerHTML = `<span class="text-red-400">${json.error || 'Ошибка'}</span>`;
+            buttons.forEach(b => b.disabled = false);
+        }
+    } catch (err) {
+        status.innerHTML = `<span class="text-red-400">Ошибка соединения</span>`;
+        buttons.forEach(b => b.disabled = false);
+    }
+}
+
+async function toggleFavorite(mangaId) {
+    const btn = document.getElementById('fav-btn');
+    try {
+        const res = await fetch('/api/favorite', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({manga_id: mangaId})
+        });
+        const data = await res.json();
+        if (data.ok) {
+            if (data.action === 'added') {
+                btn.classList.add('bg-[#e11d48]', 'text-white', 'border-[#e11d48]');
+                btn.classList.remove('bg-white/5', 'border-white/10');
+            } else {
+                btn.classList.remove('bg-[#e11d48]', 'text-white', 'border-[#e11d48]');
+                btn.classList.add('bg-white/5', 'border-white/10');
+            }
+        } else {
+            alert(data.error || 'Ошибка при добавлении в избранное');
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+    }
+}
+
+async function toggleReadStatus(mangaId, current) {
+    try {
+        const res = await fetch('/api/mark_read', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({manga_id: mangaId, read: !current})
+        });
+        const data = await res.json();
+        if (data.ok) {
+            const btn = document.getElementById('read-btn');
+            const statusEl = document.getElementById('read-status');
+            const newRead = !current;
+
+            if (btn) {
+                btn.setAttribute('onclick', `toggleReadStatus(${mangaId}, ${newRead ? 1 : 0})`);
+                const span = btn.querySelector('span');
+                if (span) {
+                    span.textContent = newRead ? 'Отметить непрочитанной' : 'Отметить прочитанной';
+                }
+            }
+
+            if (statusEl) {
+                if (newRead) {
+                    statusEl.className = 'text-emerald-400';
+                    statusEl.innerHTML = '<i class="fa-solid fa-check"></i> Прочитано';
+                } else {
+                    statusEl.className = '';
+                    statusEl.textContent = 'Не прочитано';
+                }
+            }
+        } else {
+            alert(data.error || 'Ошибка');
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+    }
+}
+
+// Comments
+const commentForm = document.getElementById('comment-form');
+if (commentForm) {
+    commentForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const textEl = document.getElementById('comment-text');
+        const text = textEl ? textEl.value.trim() : '';
+        if (!text) return;
+
+        try {
+            const res = await fetch('/api/comment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ manga_id: MANGA_ID, content: text })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                location.reload();
+            } else {
+                alert(data.error || 'Ошибка при отправке');
+            }
+        } catch (err) {
+            alert('Ошибка сети');
+        }
+    });
+}
+
+async function deleteComment(id) {
+    if (!confirm('Удалить комментарий?')) return;
+    try {
+        const res = await fetch('/api/delete_comment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            location.reload();
+        } else {
+            alert(data.error || 'Не удалось удалить');
+        }
+    } catch (e) {
+        alert('Ошибка сети');
+    }
+}
+</script>
+{% endblock %}

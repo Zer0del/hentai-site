@@ -1,0 +1,40 @@
+/* Common styles extracted from templates for DRY */
+.manga-cover {
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    background-color: #1a1a1a;
+    image-rendering: auto;
+}
+
+.tag-pill {
+    background-color: #1f1f1f;
+    color: #d1d5db;
+    font-size: 0.75rem;
+    padding: 1px 9px;
+    border-radius: 9999px;
+    transition: background 0.1s;
+}
+
+.tag-pill:hover {
+    background-color: #e11d48;
+    color: white;
+}
+
+.fakku-btn {
+    background: #e11d48;
+    color: white;
+    transition: all 0.1s;
+}
+
+.fakku-btn:hover {
+    filter: brightness(0.9);
+}
+
+/* Reader specific (moved from reader.html for reuse if needed) */
+.reader-image {
+    image-rendering: auto;
+}
+
+.thumbnail-item img {
+    image-rendering: auto;
+}

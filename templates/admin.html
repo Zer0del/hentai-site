@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Admin • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-xl mx-auto px-6 py-10">
+    <div class="mb-8">
+        <div class="uppercase text-xs tracking-[3px] font-medium text-white/60">Панель управления</div>
+        <h1 class="text-4xl font-semibold tracking-tighter">Администратор</h1>
+    </div>
+
+    <div class="max-w-xl">
+        <div class="bg-[#111] rounded-3xl p-8 border border-white/10">
+            <div class="mb-5">
+                <h2 class="font-semibold text-xl">Добавить новую мангу</h2>
+                <p class="text-sm text-white/60">Пароль по умолчанию: <code class="bg-black px-1 rounded">{{ admin_pass }}</code> (можно поменять в app.py)</p>
+            </div>
+
+            <form id="admin-form" onsubmit="submitAdminForm(event)" class="space-y-4">
+                <div>
+                    <label class="text-xs text-white/60">Пароль</label>
+                    <input name="password" type="password" value="{{ admin_pass }}" class="w-full rounded-2xl px-4 py-2.5 bg-[#1a1a1a] border border-white/10">
+                </div>
+                
+                <div class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="text-xs text-white/60">Название</label>
+                        <input name="title" required class="w-full rounded-2xl px-4 py-2.5 bg-[#1a1a1a] border border-white/10">
+                    </div>
+                    <div>
+                        <label class="text-xs text-white/60">Автор</label>
+                        <input name="author" class="w-full rounded-2xl px-4 py-2.5 bg-[#1a1a1a] border border-white/10">
+                    </div>
+                    <div>
+                        <label class="text-xs text-white/60">Описание</label>
+                        <textarea name="description" rows="2" class="w-full rounded-2xl px-4 py-2.5 bg-[#1a1a1a] border border-white/10"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-xs text-white/60">Теги (через запятую)</label>
+                        <input name="tags" placeholder="ahegao, schoolgirl, milf" class="w-full rounded-2xl px-4 py-2.5 bg-[#1a1a1a] border border-white/10">
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <label class="text-xs text-white/60 block mb-1.5">Обложка</label>
+                    <input type="file" name="cover" accept="image/*" required class="text-sm w-full">
+                </div>
+
+                <div>
+                    <label class="text-xs text-white/60 block mb-1">Страницы (изображения) или ZIP/CBZ</label>
+                    <div class="space-y-2">
+                        <input type="file" name="pages" multiple accept="image/*" class="text-sm w-full">
+                        <div class="text-center text-xs opacity-50">или</div>
+                        <input type="file" name="zipfile" accept=".zip,.cbz" class="text-sm w-full">
+                    </div>
+                </div>
+
+                <button type="submit" class="mt-3 w-full fakku-btn rounded-2xl py-[14px] font-semibold">Добавить мангу в библиотеку</button>
+                <div id="admin-status" class="text-center text-sm text-white/60 mt-1"></div>
+            </form>
+        </div>
+
+        <div class="mt-6 text-xs text-white/40 px-2">
+            После добавления манга сразу появится на главной. Все файлы хранятся локально в <span class="font-mono">uploads/manga/</span>
+        </div>
+    </div>
+
+    <!-- Existing mangas list -->
+    <div class="mt-10">
+        <!-- Bulk Import quick link -->
+        <div class="mb-6">
+            <a href="/admin/bulk"
+               class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 hover:brightness-110 rounded-2xl text-sm font-medium">
+                <i class="fa-solid fa-file-import"></i>
+                <span>Bulk Import — массовая загрузка из папок (с прогрессом)</span>
+            </a>
+            <span class="ml-3 text-xs text-white/50">Поддерживает .zip/.cbz внутри папок + первая страница как обложка</span>
+
+            <a href="/admin/forum"
+               class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 hover:brightness-110 rounded-2xl text-sm font-medium ml-3">
+                <i class="fa-solid fa-comments"></i>
+                <span>Управление форумом</span>
+            </a>
+        </div>
+
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-xl font-semibold">Все тайтлы в библиотеке</h2>
+                <div class="text-xs text-white/50">Редактируйте и удаляйте отсюда или со страницы манги</div>
+            </div>
+            <div class="text-sm text-white/50">{{ mangas|length }} тайтлов</div>
+        </div>
+
+        {% if mangas %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for m in mangas %}
+            <div class="bg-[#111] border border-white/10 rounded-2xl p-4 flex gap-4">
+                <div class="w-20 h-28 flex-shrink-0 rounded-xl overflow-hidden border border-white/10">
+                    <img src="{{ m.cover }}" class="w-full h-full object-cover" 
+                         onerror="this.src='https://picsum.photos/id/1011/80/112'">
+                </div>
+                <div class="flex-1 min-w-0 flex flex-col">
+                    <div class="font-semibold text-[15px] leading-tight mb-1">{{ m.title }}</div>
+                    {% if m.author %}
+                    <div class="text-[11px] text-white/50">{{ m.author }}</div>
+                    {% endif %}
+                    <div class="text-xs text-white/50 mb-1">{{ m.pages_count }} стр.</div>
+
+                    {% if m.tags %}
+                    <div class="flex flex-wrap gap-1 mb-2">
+                        {% for t in m.tags[:4] %}
+                        <span class="text-[10px] px-1.5 py-px bg-white/5 rounded">{{ t }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="mt-auto flex gap-2">
+                        <a href="/manga/{{ m.slug }}" 
+                           class="text-xs px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 flex-1 text-center">Открыть</a>
+                        
+                        <button onclick="adminEditManga('{{ m.slug }}')"
+                                class="text-xs px-3 py-1.5 rounded-xl bg-[#e11d48]/90 hover:bg-[#e11d48] flex-1">Редактировать</button>
+                        
+                        <button data-slug="{{ m.slug }}" data-title="{{ m.title }}" onclick="adminDeleteManga(this)"
+                                class="text-xs px-3 py-1.5 rounded-xl bg-red-900/70 hover:bg-red-900 text-white">Удалить</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-white/50 text-sm">Пока ничего нет. Добавьте первую мангу выше.</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Global simple edit modal for admin page (metadata + append) -->
+<div id="edit-modal" class="hidden fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-[#111] rounded-3xl border border-white/10 overflow-hidden">
+        <div class="px-6 py-4 border-b border-white/10 flex justify-between items-center">
+            <div>
+                <div class="font-semibold">Редактировать мангу</div>
+                <div id="edit-slug" class="text-xs text-white/40 font-mono"></div>
+            </div>
+            <button onclick="hideEditModal()" class="text-2xl leading-none text-white/50 hover:text-white">&times;</button>
+        </div>
+
+        <form id="edit-form" onsubmit="submitEditForm(event)" class="p-6 space-y-4">
+            <input type="hidden" name="slug" id="edit-slug-input">
+
+            <div>
+                <label class="text-xs text-white/60">Пароль</label>
+                <input type="password" name="password" value="{{ admin_pass }}" class="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="text-xs text-white/60">Название</label>
+                <input type="text" name="title" id="edit-title" class="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="text-xs text-white/60">Автор</label>
+                <input type="text" name="author" id="edit-author" class="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="text-xs text-white/60">Описание</label>
+                <textarea name="description" id="edit-description" rows="3" class="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-sm"></textarea>
+            </div>
+
+            <div>
+                <label class="text-xs text-white/60">Теги (через запятую)</label>
+                <input type="text" name="tags" id="edit-tags" class="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-sm">
+            </div>
+
+            <div>
+                <label class="text-xs text-white/60">Новая обложка (не обязательно)</label>
+                <input type="file" name="cover" accept="image/*" class="text-sm">
+            </div>
+
+            <div>
+                <label class="text-xs text-white/60">Добавить страницы (картинки или zip/cbz)</label>
+                <div class="flex gap-2">
+                    <input type="file" name="pages" multiple accept="image/*" class="text-sm flex-1">
+                    <input type="file" name="zipfile" accept=".zip,.cbz" class="text-sm flex-1">
+                </div>
+                <div class="text-[10px] text-white/40 mt-1">Новые страницы добавятся в конец</div>
+            </div>
+
+            <div class="pt-2 flex gap-3">
+                <button type="button" onclick="hideEditModal()" class="flex-1 py-2.5 text-sm rounded-2xl bg-white/5 hover:bg-white/10">Отмена</button>
+                <button type="submit" class="flex-1 py-2.5 text-sm font-semibold rounded-2xl bg-[#e11d48]">Сохранить изменения</button>
+            </div>
+            <div id="edit-status" class="text-center text-xs h-4 text-white/60"></div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function submitAdminForm(e) {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('admin-status');
+    status.innerHTML = 'Загружаем...';
+    
+    const fd = new FormData(form);
+    
+    try {
+        const r = await fetch('/api/add_manga', { method: 'POST', body: fd });
+        const j = await r.json();
+        
+        if (r.ok && j.ok) {
+            status.innerHTML = `<span class="text-emerald-400 font-medium">Успех! Перенаправление на страницу тайтла...</span>`;
+            setTimeout(() => {
+                window.location = '/manga/' + j.slug;
+            }, 650);
+        } else {
+            status.innerHTML = `<span class="text-red-400">${j.error || 'Ошибка'}</span>`;
+        }
+    } catch (err) {
+        status.innerHTML = `<span class="text-red-400">Сетевая ошибка</span>`;
+    }
+}
+
+// ===== Edit / Delete from admin list =====
+let currentEditSlug = null;
+
+async function adminEditManga(slug) {
+    currentEditSlug = slug;
+    const modal = document.getElementById('edit-modal');
+    const status = document.getElementById('edit-status');
+    status.innerHTML = 'Загрузка данных...';
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    document.getElementById('edit-slug').textContent = slug;
+    document.getElementById('edit-slug-input').value = slug;
+
+    try {
+        const res = await fetch('/api/manga/' + slug);
+        const data = await res.json();
+
+        document.getElementById('edit-title').value = data.title || '';
+        document.getElementById('edit-author').value = data.author || '';
+        document.getElementById('edit-description').value = data.description || '';
+        document.getElementById('edit-tags').value = (data.tags || []).join(', ');
+        status.innerHTML = '';
+    } catch (e) {
+        status.innerHTML = 'Не удалось загрузить данные';
+    }
+}
+
+function hideEditModal() {
+    const modal = document.getElementById('edit-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.getElementById('edit-status').innerHTML = '';
+}
+
+async function submitEditForm(e) {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('edit-status');
+    const btns = form.querySelectorAll('button');
+    btns.forEach(b => b.disabled = true);
+    status.innerHTML = 'Сохраняем...';
+
+    const fd = new FormData(form);
+
+    try {
+        const r = await fetch('/api/edit_manga', { method: 'POST', body: fd });
+        const j = await r.json();
+
+        if (r.ok && j.ok) {
+            status.innerHTML = `<span class="text-emerald-400">Сохранено! Обновляем...</span>`;
+            setTimeout(() => {
+                window.location.reload();
+            }, 650);
+        } else {
+            status.innerHTML = `<span class="text-red-400">${j.error || 'Ошибка'}</span>`;
+            btns.forEach(b => b.disabled = false);
+        }
+    } catch (err) {
+        status.innerHTML = `<span class="text-red-400">Ошибка сети</span>`;
+        btns.forEach(b => b.disabled = false);
+    }
+}
+
+async function adminDeleteManga(btn) {
+    const slug = btn.dataset.slug;
+    const title = btn.dataset.title;
+    if (!confirm(`Удалить мангу «${title}» навсегда?`)) return;
+
+    const pass = prompt('Введите пароль администратора:', '{{ admin_pass }}');
+    if (!pass) return;
+
+    const fd = new FormData();
+    fd.append('slug', slug);
+    fd.append('password', pass);
+
+    try {
+        const r = await fetch('/api/delete_manga', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (r.ok && j.ok) {
+            alert('Удалено');
+            window.location.reload();
+        } else {
+            alert(j.error || 'Ошибка удаления');
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+    }
+}
+</script>
+{% endblock %}

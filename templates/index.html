@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}FAKKU • Библиотека{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-12">
+    <!-- Header -->
+    <div class="flex items-end justify-between mb-6">
+        <div>
+            <div class="uppercase tracking-[3px] text-xs text-white/50 font-medium">Библиотека</div>
+            <h1 class="text-4xl font-semibold tracking-tighter">Все тайтлы</h1>
+        </div>
+        
+        <div class="flex items-center gap-x-3">
+            <a href="/tags" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
+                <i class="fa-solid fa-tags"></i> 
+                <span>Теги</span>
+            </a>
+            <a href="/random" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
+                <i class="fa-solid fa-dice"></i> 
+                <span>Случайная</span>
+            </a>
+            {% if current_user %}
+            <a href="/random?unread=1" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
+                <i class="fa-solid fa-dice"></i> 
+                <span>Непрочитанная</span>
+            </a>
+            {% endif %}
+            {% if current_search or current_tag %}
+            <a href="/" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
+                <i class="fa-solid fa-times"></i> 
+                <span>Сбросить фильтры</span>
+            </a>
+            {% endif %}
+            {% if current_user and current_user.get('is_admin') %}
+            <button onclick="showAddModal()"
+                    class="flex items-center gap-x-2 text-sm font-semibold px-5 py-2.5 bg-[#e11d48] hover:bg-[#be123c] rounded-full transition text-white">
+                <i class="fa-solid fa-plus"></i>
+                <span>Добавить мангу</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if recommendations %}
+    <div class="mb-8">
+        <div class="uppercase tracking-widest text-xs text-white/50 mb-2">Вам может понравиться</div>
+        <div class="grid-manga">
+            {% for m in recommendations %}
+            <a href="/manga/{{ m.slug }}" class="block group">
+                <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
+                    <img src="{{ m.cover }}" class="manga-cover w-full transition group-hover:scale-[1.015]" onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                    <div class="px-3 py-3">
+                        <div class="manga-title font-semibold text-[15px] leading-tight">{{ m.title }}</div>
+                        {% if m.author %}
+                        <div class="text-[11px] text-white/50 mt-0.5">{{ m.author }}</div>
+                        {% endif %}
+                        {% if m.author %}
+                        <div class="text-[11px] text-white/50 mt-0.5">{{ m.author }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filters -->
+    <div class="mb-6 flex flex-wrap items-center gap-4">
+        <div>
+            <select onchange="updateFilter('sort', this.value)" class="bg-white/5 border border-white/10 text-sm rounded-xl px-3 py-1">
+                <option value="date" {{ 'selected' if current_sort == 'date' or not current_sort }}>По дате</option>
+                <option value="rating" {{ 'selected' if current_sort == 'rating' }}>По рейтингу</option>
+                <option value="pages" {{ 'selected' if current_sort == 'pages' }}>По кол-ву страниц</option>
+                <option value="title" {{ 'selected' if current_sort == 'title' }}>По названию</option>
+            </select>
+        </div>
+
+        {% if current_user %}
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" {{ 'checked' if unread_only }} onchange="updateFilter('unread', this.checked ? '1' : '')" class="accent-[#e11d48]">
+            Только непрочитанные
+        </label>
+        {% endif %}
+
+        <div class="flex items-center gap-2 text-sm">
+            <span>Мин. рейтинг:</span>
+            <input type="number" step="0.5" min="0" max="5" value="{{ min_rating }}" onchange="updateFilter('min_rating', this.value)" class="w-16 bg-white/5 border border-white/10 rounded px-2 py-0.5 text-sm">
+        </div>
+
+        <a href="/tags" class="text-xs px-3 py-1 bg-white/5 rounded-full hover:bg-white/10">Все теги →</a>
+    </div>
+
+    <!-- Filters: Tags -->
+    {% if all_tags %}
+    <div class="mb-6">
+        <div class="text-xs uppercase tracking-widest text-white/50 mb-2 font-medium">Фильтр по тегам</div>
+        <div class="flex flex-wrap gap-2">
+            {% for tag in all_tags %}
+            <a href="/?tag={{ tag|urlencode }}" 
+               class="tag-pill cursor-pointer px-3.5 py-1 text-xs {{ 'bg-[#e11d48] text-white' if current_tag == tag else '' }}">
+                {{ tag }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Grid -->
+    {% if mangas %}
+    <div class="grid-manga">
+        {% for m in mangas %}
+        <a href="/manga/{{ m.slug }}" class="block group">
+            <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
+                <!-- Cover -->
+                <div class="relative">
+                    <img src="{{ m.cover }}" 
+                         alt="{{ m.title }}"
+                         class="manga-cover w-full transition group-hover:scale-[1.015]"
+                         onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                    
+                    <!-- Pages badge -->
+                    <div class="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-mono px-2 py-px rounded">
+                        {{ m.pages_count }} стр.
+                    </div>
+                    
+                    <!-- Rating badge -->
+                    {% if m.rating > 0 %}
+                    <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-xs">
+                        <i class="fa-solid fa-star text-[#f59e0b] text-[10px]"></i>
+                        <span class="font-medium ml-0.5">{{ '%.1f'|format(m.rating) }}</span>
+                    </div>
+                    {% endif %}
+
+                    {% if m.is_read %}
+                    <div class="absolute top-2 right-2 bg-emerald-600/80 text-white text-[10px] px-1.5 py-px rounded">Прочитано</div>
+                    {% endif %}
+                </div>
+
+                <!-- Info -->
+                <div class="px-3 py-3">
+                    <div class="manga-title font-semibold text-[15px] leading-tight text-white group-hover:text-[#e11d48] transition">
+                        {{ m.title }}
+                    </div>
+                    
+                    {% if m.tags %}
+                    <div class="flex flex-wrap gap-x-1 gap-y-1 mt-2">
+                        {% for t in m.tags[:3] %}
+                        <span class="text-[10px] bg-white/5 px-1.5 py-px rounded text-white/60">{{ t }}</span>
+                        {% endfor %}
+                        {% if m.tags|length > 3 %}<span class="text-[10px] text-white/40">+{{ m.tags|length - 3 }}</span>{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-20 border border-dashed border-white/15 rounded-3xl">
+        <i class="fa-solid fa-book text-5xl text-white/20 mb-4"></i>
+        <div class="text-xl font-medium text-white/70">Манга не найдена</div>
+        <p class="text-white/40 mt-2">Добавьте первую мангу через кнопку «Добавить мангу» выше или в админке</p>
+        {% if current_user and current_user.get('is_admin') %}
+        <button onclick="showAddModal()" class="mt-6 fakku-btn px-7 py-3 rounded-2xl font-semibold">Добавить первую мангу</button>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add Manga Modal -->
+<div id="add-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4">
+    <div class="w-full max-w-lg bg-[#111] rounded-3xl border border-white/10 overflow-hidden">
+        <div class="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+            <div>
+                <div class="font-semibold text-xl">Добавить мангу</div>
+                <div class="text-xs text-white/50">Админ панель</div>
+            </div>
+            <button onclick="hideAddModal()" class="text-white/50 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+        
+        <form id="add-form" class="p-6 space-y-5" onsubmit="submitAddManga(event)">
+            <!-- Pass -->
+            <div>
+                <label class="block text-xs text-white/60 mb-1.5">Пароль администратора</label>
+                <input type="password" name="password" value="admin123" required
+                       class="w-full bg-[#1a1a1a] border border-white/15 focus:border-[#e11d48] rounded-xl px-4 py-2.5 text-sm outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs text-white/60 mb-1.5">Название *</label>
+                <input type="text" name="title" required placeholder="Название тайтла"
+                       class="w-full bg-[#1a1a1a] border border-white/15 focus:border-[#e11d48] rounded-xl px-4 py-2.5 text-sm outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs text-white/60 mb-1.5">Описание</label>
+                <textarea name="description" rows="3" placeholder="Короткое описание..."
+                          class="w-full bg-[#1a1a1a] border border-white/15 focus:border-[#e11d48] rounded-xl px-4 py-2.5 text-sm outline-none"></textarea>
+            </div>
+
+            <div>
+                <label class="block text-xs text-white/60 mb-1.5">Теги (через запятую)</label>
+                <input type="text" name="tags" placeholder="schoolgirl, big breasts, creampie, ahegao"
+                       class="w-full bg-[#1a1a1a] border border-white/15 focus:border-[#e11d48] rounded-xl px-4 py-2.5 text-sm outline-none">
+            </div>
+
+            <!-- Cover -->
+            <div>
+                <label class="block text-xs text-white/60 mb-1.5">Обложка *</label>
+                <input type="file" name="cover" accept="image/*" required
+                       class="block w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/15">
+            </div>
+
+            <!-- Pages -->
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs text-white/60 mb-1.5">Страницы (выберите несколько изображений или zip/cbz)</label>
+                    <input type="file" name="pages" accept="image/*" multiple
+                           class="block w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/15">
+                </div>
+                <div class="text-xs text-center text-white/40">ИЛИ</div>
+                <div>
+                    <input type="file" name="zipfile" accept=".zip,.cbz"
+                           class="block w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/15">
+                    <div class="text-[10px] text-white/40 mt-1">Поддерживается .zip / .cbz — страницы будут автоматически отсортированы</div>
+                </div>
+            </div>
+
+            <div class="pt-3 flex gap-3">
+                <button type="button" onclick="hideAddModal()"
+                        class="flex-1 py-3 text-sm font-semibold rounded-2xl bg-white/5 hover:bg-white/10">Отмена</button>
+                <button type="submit" id="submit-btn"
+                        class="flex-1 py-3 text-sm font-semibold rounded-2xl bg-[#e11d48] hover:bg-[#be123c]">Загрузить мангу</button>
+            </div>
+            <div id="add-status" class="text-center text-xs text-white/50 h-4"></div>
+        </form>
+    </div>
+</div>
+
+<script>
+function updateFilter(key, value) {
+    const url = new URL(window.location.href);
+    if (value === '' || value === null) {
+        url.searchParams.delete(key);
+    } else {
+        url.searchParams.set(key, value);
+    }
+    // Also clean up empty params
+    window.location.href = url.toString();
+}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showAddModal() {
+    {% if current_user and current_user.get('is_admin') %}
+    document.getElementById('add-modal').classList.remove('hidden');
+    document.getElementById('add-modal').classList.add('flex');
+    {% else %}
+    alert('Доступно только администраторам. Активируйте админку в профиле.');
+    {% endif %}
+}
+
+function hideAddModal() {
+    const m = document.getElementById('add-modal');
+    m.classList.remove('flex');
+    m.classList.add('hidden');
+    document.getElementById('add-status').innerHTML = '';
+}
+
+async function submitAddManga(e) {
+    e.preventDefault();
+    const form = e.target;
+    const status = document.getElementById('add-status');
+    const btn = document.getElementById('submit-btn');
+    
+    btn.disabled = true;
+    btn.innerText = 'Загрузка...';
+    status.innerHTML = 'Обрабатываем файлы...';
+
+    const formData = new FormData(form);
+
+    try {
+        const resp = await fetch('/api/add_manga', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await resp.json();
+        
+        if (resp.ok && data.ok) {
+            status.innerHTML = `<span class="text-emerald-400">Готово! Перенаправляем...</span>`;
+            setTimeout(() => {
+                window.location.href = '/manga/' + data.slug;
+            }, 700);
+        } else {
+            status.innerHTML = `<span class="text-red-400">${data.error || 'Ошибка'}</span>`;
+            btn.disabled = false;
+            btn.innerText = 'Загрузить мангу';
+        }
+    } catch (err) {
+        status.innerHTML = `<span class="text-red-400">Ошибка соединения</span>`;
+        btn.disabled = false;
+        btn.innerText = 'Загрузить мангу';
+    }
+}
+
+// Optional: make tag pills also live filter on current page
+</script>
+{% endblock %}
