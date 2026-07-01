@@ -73,37 +73,36 @@
             {% endif %}
             
             <!-- Stats -->
-            <div class="flex items-center gap-x-5 text-sm mb-5">
+            <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm mb-6">
                 <div class="flex items-center gap-x-2">
-                    <div class="flex text-3xl cursor-pointer" id="rating-stars" title="Нажми на звезду, чтобы оценить. Нажми повторно на ту же звезду — чтобы отменить оценку.">
-                        {% for i in range(1,6) %}
+                    <div class="flex text-3xl cursor-pointer" id="rating-stars" title="Оцените от 1 до 10. Кликните ещё раз по той же звезде, чтобы убрать оценку.">
+                        {% for i in range(1,11) %}
                         <i class="fa-solid fa-star px-0.5 transition {{ 'text-[#f59e0b]' if manga.rating >= i - 0.5 else 'text-white/20' }}" 
                            data-value="{{ i }}" onclick="rateByStar({{ i }})"></i>
                         {% endfor %}
                     </div>
-                    <div>
-                        <span class="font-semibold text-lg" id="rating-value">{{ '%.1f'|format(manga.rating) }}</span>
-                        <span class="text-white/40 text-xs" id="rating-count">({{ manga.rating_count }} оценок)</span>
+                    <div class="pt-0.5">
+                        <span class="font-semibold text-xl tabular-nums" id="rating-value">{{ '%.1f'|format(manga.rating) }}</span>
+                        <span class="text-white/40 text-xs ml-1" id="rating-count">({{ manga.rating_count }})</span>
                         {% if current_user %}
-                        <span id="my-rating-badge" class="ml-2 text-xs px-1.5 py-0.5 bg-white/10 rounded" {% if not manga.my_rating %}style="display:none"{% endif %}>
-                            {% if manga.my_rating %}Ваша: {{ manga.my_rating }}★{% endif %}
+                        <span id="my-rating-badge" class="ml-2 text-xs px-2 py-px bg-white/5 rounded" {% if not manga.my_rating %}style="display:none"{% endif %}>
+                            {% if manga.my_rating %}ваша {{ manga.my_rating }}<span class="text-amber-400">★</span>{% endif %}
                         </span>
                         {% endif %}
                     </div>
                 </div>
                 
-                <div class="flex items-center gap-1 text-white/60">
-                    <i class="fa-solid fa-file"></i>
-                    <span>{{ manga.pages_count }} страниц</span>
+                <div class="text-white/60 flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1"><i class="fa-solid fa-file text-sm"></i> {{ manga.pages_count }} стр.</span>
                 </div>
 
                 {% if current_user %}
-                <div class="flex items-center gap-1 text-white/60">
-                    <span id="read-status" class="{{ 'text-emerald-400' if manga.is_read else '' }}">
+                <div>
+                    <span id="read-status" class="inline-flex items-center gap-1 text-white/60 {{ 'text-emerald-400' if manga.is_read else '' }}">
                         {% if manga.is_read %}
-                        <i class="fa-solid fa-check"></i> Прочитано
+                        <i class="fa-solid fa-check"></i> <span class="text-sm">Прочитано</span>
                         {% else %}
-                        Не прочитано
+                        <span class="text-sm">Не прочитано</span>
                         {% endif %}
                     </span>
                 </div>
@@ -186,7 +185,7 @@
                     {% if c.avatar %}
                     <img src="/uploads/avatars/{{ c.avatar }}" class="w-6 h-6 rounded-full object-cover" onerror="this.src='https://picsum.photos/id/1011/24/24'">
                     {% endif %}
-                    <span style="color: {{ c.username_color or '#e11d48' }}" class="font-medium text-sm">{{ c.username }}</span>
+                    <a href="/u/{{ c.username }}" style="color: {{ c.username_color or '#e11d48' }}" class="font-medium text-sm hover:underline">{{ c.username }}</a>
                     <span class="text-[10px] text-white/40">{{ c.created_at[:16] if c.created_at else '' }}</span>
                     {% if current_user and (current_user.get('is_admin') or current_user.get('id') == c.user_id) %}
                     <button onclick="deleteComment({{ c.id }})" class="ml-auto text-xs px-2 py-0.5 bg-red-900/40 hover:bg-red-900 text-red-400 rounded flex items-center gap-1" title="{{ 'Удалить как админ' if current_user.get('is_admin') else 'Удалить свой комментарий' }}">

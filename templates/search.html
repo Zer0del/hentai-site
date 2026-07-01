@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Поиск • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-16">
+    <!-- Beautiful clean header -->
+    <div class="mb-8">
+        <div class="flex items-center gap-3 mb-2">
+            <i class="fa-solid fa-search text-2xl text-white/60"></i>
+            <h1 class="text-4xl font-semibold tracking-tighter">Поиск по библиотеке</h1>
+        </div>
+        <p class="text-white/50 max-w-md">Удобный поиск, фильтры и выбор нескольких тегов одновременно. Всё чисто и понятно.</p>
+    </div>
+
+    <form method="get" action="/search" id="search-form" class="mb-8">
+        <!-- Big friendly search -->
+        <div class="flex gap-3 mb-5">
+            <div class="flex-1 relative">
+                <i class="fa-solid fa-search absolute left-5 top-4 text-white/40"></i>
+                <input type="text" name="q" value="{{ q }}" 
+                       placeholder="Название, автор или тег..." 
+                       class="w-full bg-[#111] border border-white/10 focus:border-[#e11d48] rounded-3xl pl-12 pr-5 py-3.5 text-lg outline-none transition">
+            </div>
+            <!-- Live search - no need for submit button -->
+            {% if q or selected_tags or min_rating > 0 or unread_only %}
+            <a href="/search" class="px-5 py-3.5 bg-white/5 hover:bg-white/10 rounded-3xl text-sm flex items-center">Сбросить</a>
+            {% endif %}
+        </div>
+
+        <!-- Filters row -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <!-- Sort + rating -->
+            <div class="md:col-span-4">
+                <div class="text-xs uppercase tracking-widest text-white/40 mb-1.5 px-1">Сортировка</div>
+                <select name="sort" class="w-full bg-[#111] border border-white/10 rounded-2xl px-4 py-2.5 text-sm">
+                    <option value="date" {% if sort == 'date' %}selected{% endif %}>По дате добавления</option>
+                    <option value="rating" {% if sort == 'rating' %}selected{% endif %}>По рейтингу</option>
+                    <option value="title" {% if sort == 'title' %}selected{% endif %}>По названию</option>
+                    <option value="pages" {% if sort == 'pages' %}selected{% endif %}>По количеству страниц</option>
+                </select>
+            </div>
+
+            <div class="md:col-span-3">
+                <div class="text-xs uppercase tracking-widest text-white/40 mb-1.5 px-1">Мин. рейтинг</div>
+                <div class="flex items-center gap-3 bg-[#111] border border-white/10 rounded-2xl px-4 py-2">
+                    <input type="number" name="min_rating" step="0.5" min="0" max="10" value="{{ min_rating }}" 
+                           class="bg-transparent w-16 outline-none text-sm">
+                    <span class="text-white/40 text-xs">из 10</span>
+                </div>
+            </div>
+
+            {% if current_user %}
+            <div class="md:col-span-3 flex items-end">
+                <label class="flex items-center gap-2.5 cursor-pointer bg-[#111] border border-white/10 rounded-2xl px-4 py-[13px] text-sm w-full">
+                    <input type="checkbox" name="unread" value="1" {% if unread_only %}checked{% endif %} class="accent-[#e11d48]">
+                    <span>Только непрочитанные</span>
+                </label>
+            </div>
+            {% endif %}
+
+            <div class="md:col-span-2 flex items-end">
+                <button type="submit" class="w-full py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-sm transition">Применить фильтры</button>
+            </div>
+        </div>
+
+        <!-- Multi-tag selector - the highlight of the page -->
+        <div class="mt-6">
+            <div class="flex items-center justify-between mb-2 px-1">
+                <div>
+                    <div class="text-xs uppercase tracking-widest text-white/40">Теги (выберите несколько)</div>
+                    <div class="text-sm text-white/70">Будут показаны манги, содержащие <span class="font-medium">все</span> выбранные теги</div>
+                </div>
+                {% if selected_tags %}
+                <button type="button" onclick="clearTags()" class="text-xs text-white/50 hover:text-white px-3 py-1">Очистить теги</button>
+                {% endif %}
+            </div>
+
+            <!-- Nice tag pills -->
+            <div class="flex flex-wrap gap-2 bg-[#111] border border-white/10 rounded-3xl p-4 max-h-[210px] overflow-auto">
+                {% for tag in all_tags %}
+                <label class="tag-pill cursor-pointer select-none px-3.5 py-1 text-sm transition
+                    {% if tag in selected_tags %}bg-[#e11d48] text-white{% endif %}"
+                       onclick="toggleTag(this, '{{ tag }}')">
+                    <input type="checkbox" name="tag" value="{{ tag }}" class="hidden" {% if tag in selected_tags %}checked{% endif %}>
+                    {{ tag }}
+                </label>
+                {% endfor %}
+                {% if not all_tags %}
+                <span class="text-white/40 text-sm">Теги появятся после добавления манги</span>
+                {% endif %}
+            </div>
+
+            {% if selected_tags %}
+            <div class="mt-2 text-xs text-white/50 px-1">Выбрано: <span class="font-mono text-white/70">{{ selected_tags | join(', ') }}</span></div>
+            {% endif %}
+        </div>
+    </form>
+
+    <!-- Results (live updated) -->
+    <div id="results-container">
+    <div class="mb-3 flex items-baseline justify-between px-1">
+        <div class="text-lg font-semibold tracking-tight">
+            Результаты <span class="text-white/40 text-base font-normal">({{ results|length }})</span>
+        </div>
+        {% if q or selected_tags %}
+        <div class="text-xs text-white/40">По запросу «{{ q or selected_tags|join(', ') }}»</div>
+        {% endif %}
+    </div>
+
+    {% if results %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
+        {% for m in results %}
+        <a href="/manga/{{ m.slug }}" class="block group">
+            <div class="fakku-card rounded-2xl overflow-hidden border border-white/5 bg-[#111] transition-all duration-200 group-hover:border-white/20">
+                <div class="relative">
+                    <img src="{{ m.cover }}" 
+                         alt="{{ m.title }}"
+                         class="manga-cover w-full transition duration-200 group-hover:scale-[1.015]"
+                         onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                    
+                    <div class="absolute bottom-2 right-2 bg-black/75 text-white text-[10px] font-mono px-1.5 py-px rounded">
+                        {{ m.pages_count }} стр.
+                    </div>
+                    
+                    {% if m.rating > 0 %}
+                    <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-xs text-white/90">
+                        <i class="fa-solid fa-star text-[#f59e0b] text-[10px]"></i>
+                        <span class="font-medium ml-0.5">{{ '%.1f'|format(m.rating) }}</span>
+                    </div>
+                    {% endif %}
+
+                    {% if m.is_read %}
+                    <div class="absolute top-2 right-2 bg-emerald-600/70 text-white text-[10px] px-1.5 py-px rounded">Прочитано</div>
+                    {% endif %}
+                </div>
+
+                <div class="px-3 py-2.5">
+                    <div class="manga-title font-semibold text-[13.5px] leading-snug text-white group-hover:text-[#e11d48] transition">{{ m.title }}</div>
+                    {% if m.author %}
+                    <div class="text-[10px] text-white/50 mt-0.5">{{ m.author }}</div>
+                    {% endif %}
+
+                    {% if m.tags %}
+                    <div class="flex flex-wrap gap-x-1 gap-y-0.5 mt-2">
+                        {% for t in m.tags[:4] %}
+                        <span class="text-[10px] bg-white/5 px-1.5 py-px rounded text-white/55">{{ t }}</span>
+                        {% endfor %}
+                        {% if m.tags|length > 4 %}<span class="text-[10px] text-white/35">ещё {{ m.tags|length - 4 }}</span>{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-16 border border-white/10 rounded-3xl bg-[#111]">
+        <i class="fa-solid fa-search text-5xl text-white/10 mb-4"></i>
+        <div class="text-xl font-medium text-white/70">Ничего не найдено</div>
+        <p class="text-white/40 mt-1 text-sm max-w-xs mx-auto">Попробуйте ослабить фильтры или поисковый запрос. Выбирайте меньше тегов для более широкого поиска.</p>
+    </div>
+    {% endif %}
+    </div>
+</div>
+
+<script>
+let searchDebounce = null;
+
+function updateResults() {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+        const form = document.getElementById('search-form');
+        if (!form) return;
+        const params = new URLSearchParams(new FormData(form));
+        // fetch full page and replace the results container (simple & reliable)
+        fetch('/search?' + params.toString())
+            .then(r => r.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const newContainer = doc.getElementById('results-container');
+                const current = document.getElementById('results-container');
+                if (newContainer && current) {
+                    current.innerHTML = newContainer.innerHTML;
+                    if (window.initSmoothImages) window.initSmoothImages();
+                }
+            })
+            .catch(() => form.submit());
+    }, 250);
+}
+
+// Live updates on all inputs/filters
+const form = document.getElementById('search-form');
+if (form) {
+    form.querySelectorAll('input, select').forEach(el => {
+        const event = (el.type === 'text' || el.tagName === 'INPUT' && el.name === 'q') ? 'input' : 'change';
+        el.addEventListener(event, updateResults);
+    });
+    // Prevent default submit (we use live)
+    form.addEventListener('submit', e => {
+        e.preventDefault();
+        updateResults();
+    });
+}
+
+// Tag toggle live
+function toggleTag(el, tag) {
+    const checkbox = el.querySelector('input[type="checkbox"]');
+    checkbox.checked = !checkbox.checked;
+    if (checkbox.checked) {
+        el.classList.add('bg-[#e11d48]', 'text-white');
+    } else {
+        el.classList.remove('bg-[#e11d48]', 'text-white');
+    }
+    updateResults();
+}
+
+function clearTags() {
+    const f = document.getElementById('search-form');
+    f.querySelectorAll('input[name="tag"]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.tag-pill').forEach(p => p.classList.remove('bg-[#e11d48]', 'text-white'));
+    updateResults();
+}
+</script>
+{% endblock %}

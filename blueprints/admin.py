@@ -288,4 +288,89 @@ def admin_forum_delete_post():
     conn.close()
     return jsonify({"ok": True})
 
+@admin_bp.route("/admin/users")
+def admin_users():
+    shared = _get_shared()
+    user = shared['get_current_user']()
+    if not user or not user.get('is_admin'):
+        return redirect(url_for('main.index'))
+
+    get_db = shared['get_db']
+    conn = get_db()
+
+    # Get all users + stats
+    users_raw = conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+    users = []
+    for u in users_raw:
+        uid = u['id']
+        ratings_c = conn.execute("SELECT COUNT(*) as c FROM user_ratings WHERE user_id=?", (uid,)).fetchone()['c']
+        favs_c = conn.execute("SELECT COUNT(*) as c FROM user_favorites WHERE user_id=?", (uid,)).fetchone()['c']
+        comm_c = conn.execute("SELECT COUNT(*) as c FROM comments WHERE user_id=?", (uid,)).fetchone()['c']
+        forum_c = conn.execute("SELECT COUNT(*) as c FROM forum_posts WHERE user_id=?", (uid,)).fetchone()['c']
+
+        # tag weights
+        try:
+            from app import get_user_tag_weights
+            weights = get_user_tag_weights(uid)
+            top_w = sorted(weights.items(), key=lambda x: -x[1])[:4]
+        except:
+            top_w = []
+
+        d = dict(u)
+        d['ratings_count'] = ratings_c
+        d['favs_count'] = favs_c
+        d['comments_count'] = comm_c
+        d['forum_posts_count'] = forum_c
+        d['top_weights'] = top_w
+        users.append(d)
+
+    conn.close()
+    return render_template("admin_users.html", users=users, current_user=user)
+
+
+@admin_bp.route("/admin/api/set_vip", methods=["POST"])
+def admin_set_vip():
+    shared = _get_shared()
+    admin = shared['get_current_user']()
+    if not admin or not admin.get('is_admin'):
+        return jsonify({"error": "admin only"}), 403
+
+    user_id = int(request.form.get("user_id"))
+    give = int(request.form.get("give", 1))
+
+    conn = shared['get_db']()
+    conn.execute("UPDATE users SET is_premium=? WHERE id=?", (give, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@admin_bp.route("/admin/api/ban_user", methods=["POST"])
+def admin_ban_user():
+    shared = _get_shared()
+    admin = shared['get_current_user']()
+    if not admin or not admin.get('is_admin'):
+        return jsonify({"error": "admin only"}), 403
+
+    user_id = int(request.form.get("user_id"))
+    duration = (request.form.get("duration") or "24h").strip().lower()
+
+    banned_until = ""
+    if duration != "permanent":
+        import datetime
+        now = datetime.datetime.utcnow()
+        if duration.endswith('h'):
+            delta = datetime.timedelta(hours=int(duration[:-1]))
+        elif duration.endswith('d'):
+            delta = datetime.timedelta(days=int(duration[:-1]))
+        else:
+            delta = datetime.timedelta(hours=24)
+        banned_until = (now + delta).isoformat()
+
+    conn = shared['get_db']()
+    conn.execute("UPDATE users SET banned_until=? WHERE id=?", (banned_until, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "banned_until": banned_until})
+
 print("admin blueprint loaded")

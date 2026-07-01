@@ -646,6 +646,9 @@ def init_db():
             "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT ''",
             "ALTER TABLE users ADD COLUMN username_color TEXT DEFAULT '#e11d48'",
             "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP",
+            "ALTER TABLE users ADD COLUMN banned_until TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN showcase_public INTEGER DEFAULT 1",
         ]:
             try:
                 c.execute(stmt)

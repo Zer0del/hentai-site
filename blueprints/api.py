@@ -88,8 +88,8 @@ def api_rate():
     except (TypeError, ValueError):
         return jsonify({"error": "bad input"}), 400
 
-    if score != 0 and not (1 <= score <= 5):
-        return jsonify({"error": "score 1-5 or 0 to remove"}), 400
+    if score != 0 and not (1 <= score <= 10):
+        return jsonify({"error": "score 1-10 or 0 to remove"}), 400
 
     conn = shared['get_db']()
     existing = conn.execute("SELECT score FROM user_ratings WHERE user_id=? AND manga_id=?", (user['id'], manga_id)).fetchone()
@@ -121,6 +121,13 @@ def api_rate():
             conn.execute("UPDATE mangas SET rating_sum = ? WHERE id = ?", (rsum - old_score + score, manga_id))
     conn.commit()
     conn.close()
+
+    # Invalidate weights cache so profile and recs reflect new rating immediately
+    try:
+        from app import invalidate_user_tag_cache
+        invalidate_user_tag_cache(user['id'])
+    except Exception:
+        pass
 
     # Re-query fresh avg/count for immediate UI update in JS
     conn = shared['get_db']()
@@ -154,6 +161,14 @@ def api_favorite():
         action = "added"
     conn.commit()
     conn.close()
+
+    # Invalidate weights cache (fav affects weights)
+    try:
+        from app import invalidate_user_tag_cache
+        invalidate_user_tag_cache(user['id'])
+    except Exception:
+        pass
+
     return jsonify({"ok": True, "action": action})
 
 @api_bp.route("/api/update_profile", methods=["POST"])
@@ -162,7 +177,7 @@ def api_update_profile():
     user = shared['get_current_user']()
     if not user:
         return jsonify({"error": "Войдите в систему"}), 403
-    username_color = request.form.get("username_color", "#e11d48")
+    username_color = request.form.get("username_color") or request.form.get("color", "#e11d48")
     avatar_file = request.files.get("avatar")
     conn = shared['get_db']()
     if avatar_file and avatar_file.filename:
@@ -170,6 +185,19 @@ def api_update_profile():
         if avatar_name:
             conn.execute("UPDATE users SET avatar = ? WHERE id = ?", (avatar_name, user['id']))
     conn.execute("UPDATE users SET username_color = ? WHERE id = ?", (username_color, user['id']))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+@api_bp.route("/api/update_showcase", methods=["POST"])
+def api_update_showcase():
+    shared = _get_shared()
+    user = shared['get_current_user']()
+    if not user:
+        return jsonify({"error": "login"}), 403
+    public = int(request.form.get("showcase_public", 1))
+    conn = shared['get_db']()
+    conn.execute("UPDATE users SET showcase_public = ? WHERE id = ?", (public, user['id']))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
@@ -408,6 +436,57 @@ def api_delete_manga():
     return jsonify({"ok": True, "deleted": slug})
 
 
+@api_bp.route("/api/delete_all_manga", methods=["POST"])
+def api_delete_all_manga():
+    shared = _get_shared()
+    password = request.form.get("password", "") or request.headers.get("X-Admin-Pass", "")
+    if password != shared['ADMIN_PASS']:
+        return jsonify({"error": "Неверный пароль администратора"}), 403
+
+    user = shared['get_current_user']()
+    if not user or not user.get('is_admin'):
+        return jsonify({"error": "Требуются права администратора (активируйте админку в профиле)"}), 403
+
+    # Remove all manga files
+    try:
+        import shutil
+        manga_root = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'manga')
+        if os.path.exists(manga_root):
+            for item in os.listdir(manga_root):
+                p = os.path.join(manga_root, item)
+                if os.path.isdir(p):
+                    shutil.rmtree(p, ignore_errors=True)
+    except Exception as e:
+        # continue anyway
+        pass
+
+    conn = shared['get_db']()
+    try:
+        conn.execute("DELETE FROM mangas")
+        conn.execute("DELETE FROM user_ratings")
+        conn.execute("DELETE FROM user_favorites")
+        conn.execute("DELETE FROM user_history")
+        conn.execute("DELETE FROM comments")
+        conn.commit()
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"DB error: {e}"}), 500
+    conn.close()
+
+    # clear cache and bulk progress
+    try:
+        from helpers import _cache
+        _cache.clear()
+    except:
+        pass
+    try:
+        shared['BULK_PROGRESS_FILE'].unlink(missing_ok=True)
+    except:
+        pass
+
+    return jsonify({"ok": True, "deleted": "all"})
+
+
 @api_bp.route("/api/edit_manga", methods=["POST"])
 def api_edit_manga():
     shared = _get_shared()
@@ -602,5 +681,47 @@ def api_delete_page():
     conn.close()
 
     return jsonify({"ok": True, "remaining": len(pages)})
+
+@api_bp.route("/api/search")
+def api_search():
+    shared = _get_shared()
+    get_all_mangas = shared['get_all_mangas']
+    get_cover_url = shared['get_cover_url']
+    compute_rating = shared['compute_rating']
+
+    q = (request.args.get("q") or "").strip().lower()
+    limit = min(int(request.args.get("limit", 8)), 12)
+
+    if not q:
+        return jsonify([])
+
+    mangas = get_all_mangas()
+    results = []
+    for m in mangas:
+        title = (m["title"] or "").lower()
+        author = (m["author"] or "").lower() if "author" in m.keys() else ""
+        tags = json.loads(m["tags"] or "[]")
+        tags_lower = [t.lower() for t in tags]
+
+        if q in title or q in author or any(q in t for t in tags_lower):
+            avg, cnt = compute_rating(m)
+            cover = get_cover_url(m, thumb=True)
+            results.append({
+                "id": m["id"],
+                "slug": m["slug"],
+                "title": m["title"],
+                "author": m["author"] or "",
+                "cover": cover,
+                "rating": round(avg, 1),
+                "rating_count": cnt,
+                "pages_count": len(json.loads(m["pages"] or "[]")),
+                "tags": tags[:4],
+            })
+            if len(results) >= limit:
+                break
+
+    # simple relevance: exact title start first
+    results.sort(key=lambda x: (0 if x["title"].lower().startswith(q) else 1, -x["rating"]))
+    return jsonify(results[:limit])
 
 print("api blueprint loaded with core endpoints")

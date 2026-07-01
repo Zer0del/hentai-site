@@ -81,6 +81,19 @@
                 <i class="fa-solid fa-comments"></i>
                 <span>Управление форумом</span>
             </a>
+            <a href="/admin/users"
+               class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:brightness-110 rounded-2xl text-sm font-medium ml-3">
+                <i class="fa-solid fa-users"></i>
+                <span>Пользователи</span>
+            </a>
+
+            <!-- Delete all -->
+            <button onclick="deleteAllManga()"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 bg-red-700 hover:bg-red-800 text-white rounded-2xl text-sm font-medium ml-3"
+                    title="Необратимо удалит всю мангу, рейтинги, избранное, историю и комментарии">
+                <i class="fa-solid fa-trash-can"></i>
+                <span>Удалить ВСЮ мангу</span>
+            </button>
         </div>
 
         <div class="flex items-center justify-between mb-4">
@@ -306,6 +319,30 @@ async function adminDeleteManga(btn) {
         const j = await r.json();
         if (r.ok && j.ok) {
             alert('Удалено');
+            window.location.reload();
+        } else {
+            alert(j.error || 'Ошибка удаления');
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+    }
+}
+
+async function deleteAllManga() {
+    if (!confirm('⚠️ УДАЛИТЬ ВСЮ МАНГУ И ВСЕ ДАННЫЕ (оценки, избранное, история, комментарии)? Это НЕОБРАТИМО!')) return;
+    if (!confirm('ПОСЛЕДНЕЕ ПРЕДУПРЕЖДЕНИЕ: подтвердить полное удаление всей библиотеки?')) return;
+
+    const pass = prompt('Введите пароль администратора для подтверждения:', '{{ admin_pass }}');
+    if (!pass) return;
+
+    const fd = new FormData();
+    fd.append('password', pass);
+
+    try {
+        const r = await fetch('/api/delete_all_manga', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (r.ok && j.ok) {
+            alert('Вся манга удалена.');
             window.location.reload();
         } else {
             alert(j.error || 'Ошибка удаления');

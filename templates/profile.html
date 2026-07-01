@@ -105,6 +105,14 @@
             <button type="button" onclick="updatePremiumSettings()" class="px-4 py-2 bg-[#e11d48] hover:bg-[#be123c] rounded-xl text-sm">Сохранить настройки</button>
         </form>
         <p class="text-[10px] text-white/40 mt-2">Аватар и цвет ника доступны только премиум пользователям.</p>
+
+        <!-- Showcase toggle -->
+        <div class="mt-4 pt-4 border-t border-white/10">
+            <label class="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" id="showcase-toggle" {{ 'checked' if user.get('showcase_public', 1) }} onchange="toggleShowcase(this)">
+                Показывать мою публичную витрину другим пользователям (при клике на ник/аватар)
+            </label>
+        </div>
     </div>
     {% endif %}
 
@@ -119,46 +127,83 @@
     <p class="text-xs text-blue-400 mb-4">У вас права администратора — кнопка «Удалить» будет рядом с каждым комментарием на страницах манг.</p>
     {% endif %}
 
-    <!-- My ratings + tag weights -->
-    <div class="grid md:grid-cols-2 gap-8">
-        <div>
-            <h2 class="text-xl font-semibold mb-4">Мои оценки</h2>
-            {% if my_ratings %}
-            <ul class="space-y-1 text-sm">
-                {% for r in my_ratings %}
-                <li>
-                    <a href="/manga/{{ r.slug }}" class="flex justify-between items-center bg-[#111] hover:bg-white/10 px-3 py-2 rounded-xl transition-colors">
-                        <span class="truncate">{{ r.title }}</span>
-                        <span class="text-[#f59e0b] ml-2 flex-shrink-0">{{ r.score }} ★</span>
-                    </a>
-                </li>
+    <!-- Favorites + Ratings + Weights (redesigned, non-bloated) -->
+    <div>
+        <div class="flex gap-2 border-b border-white/10 mb-4 text-sm">
+            <button onclick="showProfileTab('favs')" id="tab-favs" class="px-4 py-2 border-b-2 border-[#e11d48] font-medium">Избранное ({{ favorites|length }})</button>
+            <button onclick="showProfileTab('ratings')" id="tab-ratings" class="px-4 py-2 text-white/60 hover:text-white">Мои оценки ({{ my_ratings|length }})</button>
+            <button onclick="showProfileTab('weights')" id="tab-weights" class="px-4 py-2 text-white/60 hover:text-white">Веса тегов</button>
+        </div>
+
+        <div id="tab-content-favs">
+            {% if favorites %}
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[520px] overflow-auto pr-2">
+                {% for m in favorites %}
+                <a href="/manga/{{ m.slug }}" class="block group">
+                    <div class="rounded-2xl overflow-hidden border border-white/10 bg-[#111]">
+                        <img src="{{ m.cover }}" class="w-full aspect-[3/4] object-cover group-hover:scale-[1.02] transition" onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                        <div class="p-2 text-xs truncate">{{ m.title }}</div>
+                    </div>
+                </a>
                 {% endfor %}
-            </ul>
+            </div>
             {% else %}
-            <p class="text-white/40 text-sm">Вы ещё не ставили оценки.</p>
+            <p class="text-white/40">Избранное пусто.</p>
             {% endif %}
         </div>
 
-        <div>
-            <h2 class="text-xl font-semibold mb-4">Ваши предпочтения по тегам</h2>
+        <div id="tab-content-ratings" class="hidden">
+            {% if my_ratings %}
+            <div class="max-h-[420px] overflow-auto space-y-1 pr-1">
+                {% for r in my_ratings %}
+                <a href="/manga/{{ r.slug }}" class="flex justify-between items-center bg-[#111] hover:bg-white/10 px-3 py-2 rounded-xl text-sm transition">
+                    <span class="truncate">{{ r.title }}</span>
+                    <span class="text-[#f59e0b] ml-2">{{ r.score }} ★</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-white/40">Оценок пока нет.</p>
+            {% endif %}
+        </div>
+
+        <div id="tab-content-weights" class="hidden">
             {% if tag_weights %}
-            <div class="text-sm space-y-1 bg-[#111] rounded-2xl p-4 max-h-64 overflow-auto">
+            <div class="text-sm bg-[#111] rounded-2xl p-4 max-h-80 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-x-8">
                 {% for tag, w in tag_weights %}
-                <div class="flex justify-between py-0.5 border-b border-white/5 last:border-0">
-                    <span class="truncate">{{ tag }}</span>
-                    <span class="font-mono ml-2 {{ 'text-emerald-400' if w > 0 else 'text-red-400' if w < 0 else 'text-white/50' }}">
-                        {{ w }}
-                    </span>
+                <div class="flex justify-between py-1 border-b border-white/5">
+                    <span>{{ tag }}</span>
+                    <span class="font-mono {{ 'text-emerald-400' if w > 0 else 'text-red-400' if w < 0 else 'text-white/50' }}">{{ w }}</span>
                 </div>
                 {% endfor %}
             </div>
-            <p class="text-xs text-white/40 mt-2">Веса рассчитываются на основе ваших оценок и избранного. Положительные — любимые теги.</p>
+            <p class="text-xs text-white/40 mt-2">Веса обновляются в реальном времени после оценок и избранного.</p>
             {% else %}
-            <p class="text-white/40 text-sm">Поставьте оценки или добавьте мангу в избранное, чтобы увидеть предпочтения.</p>
+            <p class="text-white/40">Добавьте оценки или избранное, чтобы увидеть веса.</p>
             {% endif %}
         </div>
     </div>
 </div>
+
+<script>
+function showProfileTab(tab) {
+    document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
+    document.getElementById('tab-content-' + tab).classList.remove('hidden');
+    
+    document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.classList.remove('border-b-2', 'border-[#e11d48]', 'font-medium');
+        el.classList.add('text-white/60');
+    });
+    const active = document.getElementById('tab-' + tab);
+    active.classList.add('border-b-2', 'border-[#e11d48]', 'font-medium');
+    active.classList.remove('text-white/60');
+}
+// init first tab
+document.addEventListener('DOMContentLoaded', () => {
+    const first = document.getElementById('tab-favs');
+    if (first) first.classList.add('border-b-2', 'border-[#e11d48]', 'font-medium');
+});
+</script>
 {% endblock %}
 
 {% block scripts %}
@@ -213,6 +258,22 @@ async function updatePremiumSettings() {
         }
     } catch(e) {
         alert('Ошибка сети');
+    }
+}
+
+async function toggleShowcase(checkbox) {
+    const fd = new FormData();
+    fd.append('showcase_public', checkbox.checked ? '1' : '0');
+    try {
+        const res = await fetch('/api/update_showcase', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!data.ok) {
+            alert(data.error || 'Ошибка');
+            checkbox.checked = !checkbox.checked;
+        }
+    } catch(e) {
+        alert('Ошибка сети');
+        checkbox.checked = !checkbox.checked;
     }
 }
 </script>

@@ -75,8 +75,8 @@ DB_PATH = os.path.join(DATA_DIR, "manga.db")
 # ==================== BULK IMPORT CONFIG ====================
 BULK_PROGRESS_FILE = Path("bulk_import_progress.json")
 BULK_ROOT_FILE = Path("bulk_root.txt")
-BULK_BASE_URL = "http://127.0.0.1:5000"
-DEFAULT_BULK_ROOT = Path(os.environ.get("BULK_ROOT", "F:/Manga"))  # portable default, override via env or bulk_root.txt UI
+BULK_BASE_URL = os.environ.get("BULK_BASE_URL", "http://127.0.0.1:5000")
+DEFAULT_BULK_ROOT = Path(os.environ.get("BULK_ROOT", str(Path.cwd() / "manga_import")))  # portable default; override via env / bulk_root.txt UI / bulk page. On server use server path!
 
 def get_bulk_root() -> Path:
     """Returns the current manga root folder.
@@ -924,6 +924,14 @@ def update_user_history(user_id, manga_id, last_page, completed=False):
 _cache = {}
 _CACHE_TTL = 45  # seconds
 
+def invalidate_user_tag_cache(user_id):
+    """Clear tag weights (and related) cache for a user so profile/recommendations update immediately."""
+    prefix = f"tag_weights:{user_id}"
+    rec_prefix = f"recs:{user_id}"
+    to_delete = [k for k in list(_cache.keys()) if k.startswith(prefix) or k.startswith(rec_prefix)]
+    for k in to_delete:
+        _cache.pop(k, None)
+
 def _get_cached(key, func, *args, **kwargs):
     now = time.time()
     entry = _cache.get(key)
@@ -958,15 +966,10 @@ def _compute_user_tag_weights(user_id):
         tags = json.loads(row['tags'] or '[]')
         w = 0
         if row['is_fav']:
-            w += 4
-        if row['score'] >= 5:
             w += 3
-        elif row['score'] == 4:
-            w += 1
-        elif row['score'] == 2:
-            w -= 1
-        elif row['score'] == 1:
-            w -= 2
+        if row['score'] > 0:
+            # proportional to 10-point score (1 -> negative, 10 -> positive)
+            w += round((row['score'] - 5) * 0.7)
         for t in tags:
             tag_weights[t] = tag_weights.get(t, 0) + w
 
@@ -1180,7 +1183,7 @@ def api_update_profile():
         return jsonify({"error": "Доступно только премиум пользователям"}), 403
 
     avatar_file = request.files.get("avatar")
-    color = (request.form.get("color") or user.get('username_color') or '#e11d48').strip()
+    color = (request.form.get("username_color") or request.form.get("color") or user.get('username_color') or '#e11d48').strip()
 
     try:
         conn = get_db()

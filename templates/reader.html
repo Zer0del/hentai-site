@@ -15,7 +15,7 @@
         align-items: center;
         justify-content: center;
         width: 100%;
-        height: calc(100vh - 56px); /* only toolbar; bottom bar overlays without shifting layout */
+        height: calc(100vh - 56px - 90px); /* toolbar + bottom strip to ensure last page fits fully */
         overflow: hidden;
         user-select: none;
         touch-action: pan-x pan-y;
@@ -27,7 +27,7 @@
     }
 
     .reader-focused .reader-image-container {
-        height: calc(100vh - 56px);
+        height: calc(100vh - 56px - 90px);
     }
     .reader-image-wrapper {
         position: relative;
@@ -95,7 +95,7 @@
             display: none !important;
         }
         .reader-image-container {
-            height: 100vh !important;
+            height: calc(100vh - 70px) !important; /* leave room for controls */
         }
     }
 

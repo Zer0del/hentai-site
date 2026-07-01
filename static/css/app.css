@@ -1,40 +1,85 @@
-/* Common styles extracted from templates for DRY */
+/* Common styles extracted from templates for DRY - polished minimalist */
 .manga-cover {
     aspect-ratio: 3 / 4;
     object-fit: cover;
-    background-color: #1a1a1a;
+    background-color: #111;
     image-rendering: auto;
 }
 
 .tag-pill {
     background-color: #1f1f1f;
     color: #d1d5db;
-    font-size: 0.75rem;
-    padding: 1px 9px;
+    font-size: 0.7rem;
+    padding: 1px 8px;
     border-radius: 9999px;
-    transition: background 0.1s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    letter-spacing: 0.01em;
 }
 
 .tag-pill:hover {
     background-color: #e11d48;
     color: white;
+    transform: translateY(-1px);
 }
 
 .fakku-btn {
     background: #e11d48;
     color: white;
-    transition: all 0.1s;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 600;
 }
 
 .fakku-btn:hover {
-    filter: brightness(0.9);
+    background: #be123c;
+    transform: translateY(-1px);
 }
 
-/* Reader specific (moved from reader.html for reuse if needed) */
+/* Reader specific */
 .reader-image {
     image-rendering: auto;
 }
 
 .thumbnail-item img {
     image-rendering: auto;
+}
+
+/* Smooth beautiful image loading - each image fades in as soon as loaded */
+img.manga-cover,
+img.reader-image,
+#results-container img,
+.grid img,
+.showcase-img {
+    opacity: 0;
+    transition: opacity 0.4s ease-in-out;
+}
+
+img.manga-cover.loaded,
+img.reader-image.loaded,
+#results-container img.loaded,
+.grid img.loaded,
+.showcase-img.loaded {
+    opacity: 1;
+}
+
+/* Global minimalist polish */
+input:focus, button:focus, a:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px rgba(225, 29, 72, 0.35);
+}
+
+.section-head {
+    letter-spacing: -0.02em;
+}
+
+/* Live search dropdown polish */
+#search-results a {
+    transition: background-color 0.1s ease;
+}
+
+#search-results img {
+    transition: transform 0.2s ease;
+}
+
+#search-results a:hover img {
+    transform: scale(1.03);
 }

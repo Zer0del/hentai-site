@@ -35,7 +35,7 @@ from typing import List, Set, Tuple
 import requests
 
 # ==================== CONFIG ====================
-BASE_URL = "http://127.0.0.1:5000"
+BASE_URL = os.environ.get("BULK_BASE_URL", "http://127.0.0.1:5000")
 ADMIN_PASS = "admin123"          # the one used in forms / API
 
 # Login credentials of a user that has is_admin=1
@@ -44,8 +44,9 @@ LOGIN_PASSWORD = "demo"
 
 # Shared with the web UI (bulk.html / app.py)
 # If you set the folder in the web Bulk Import UI, this script will pick it up automatically.
+# On server-deployed copy: set BULK_ROOT to server folder, and BASE_URL to your server.
 BULK_ROOT_FILE = Path("bulk_root.txt")
-DEFAULT_MANGA_ROOT = Path(os.environ.get("BULK_ROOT", "F:/Manga"))
+DEFAULT_MANGA_ROOT = Path(os.environ.get("BULK_ROOT", str(Path.cwd() / "manga_import")))
 
 def load_manga_root() -> Path:
     try:

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_user.username }} • Витрина{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-6 py-10">
+    <div class="flex items-center gap-4 mb-8">
+        {% if profile_user.avatar %}
+        <img src="/uploads/avatars/{{ profile_user.avatar }}" class="w-16 h-16 rounded-full object-cover border border-white/10">
+        {% else %}
+        <div class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-3xl">👤</div>
+        {% endif %}
+        <div>
+            <h1 class="text-4xl font-semibold" style="color: {{ profile_user.username_color or '#e11d48' }}">{{ profile_user.username }}</h1>
+            <div class="text-white/40 text-sm">Публичная витрина профиля</div>
+        </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-8">
+        <!-- Favorites -->
+        <div>
+            <h2 class="text-xl font-semibold mb-3">Избранное ({{ favorites|length }})</h2>
+            {% if favorites %}
+            <div class="grid grid-cols-3 gap-3">
+                {% for m in favorites[:9] %}
+                <a href="/manga/{{ m.slug }}" class="block">
+                    <img src="{{ m.cover }}" class="showcase-img rounded-xl w-full aspect-[3/4] object-cover border border-white/10" onerror="this.src='https://picsum.photos/id/1011/200/267'">
+                    <div class="text-xs mt-1 truncate">{{ m.title }}</div>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-white/40">Пока ничего нет в избранном.</p>
+            {% endif %}
+        </div>
+
+        <!-- Ratings -->
+        <div>
+            <h2 class="text-xl font-semibold mb-3">Недавние оценки</h2>
+            {% if my_ratings %}
+            <div class="space-y-2 text-sm">
+                {% for r in my_ratings %}
+                <a href="/manga/{{ r.slug }}" class="flex justify-between bg-[#111] hover:bg-white/5 px-3 py-2 rounded-xl">
+                    <span class="truncate">{{ r.title }}</span>
+                    <span class="text-amber-400 ml-2">{{ r.score }} ★</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-white/40">Оценок ещё нет.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if tag_weights %}
+    <div class="mt-8">
+        <h2 class="text-xl font-semibold mb-3">Предпочтения по тегам</h2>
+        <div class="flex flex-wrap gap-2">
+            {% for tag, w in tag_weights %}
+            <span class="px-3 py-1 text-sm rounded-full {{ 'bg-emerald-500/20 text-emerald-300' if w > 0 else 'bg-red-500/20 text-red-300' if w < 0 else 'bg-white/10' }}">
+                {{ tag }} <span class="font-mono text-xs opacity-70">{{ w }}</span>
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mt-10 text-center">
+        <a href="/" class="text-sm text-white/50 hover:text-white">← На главную</a>
+    </div>
+</div>
+{% endblock %}

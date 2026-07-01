@@ -39,18 +39,7 @@ def index():
     sort = request.args.get("sort", "date")
     unread_only = request.args.get("unread") == "1"
     min_rating = float(request.args.get("min_rating", 0))
-
-    mangas = get_all_mangas(search=search or None, tag=tag or None)
-
-    if search:
-        s = search.lower()
-        filtered = []
-        for m in mangas:
-            tags = json.loads(m["tags"] or "[]")
-            author = (m["author"] or "").lower() if "author" in (dict(m).keys() if hasattr(m, "keys") else []) else (getattr(m, "author", "") or "").lower()
-            if s in m["title"].lower() or s in author or any(s in t.lower() for t in tags):
-                filtered.append(m)
-        mangas = filtered
+    view_all = request.args.get("view") == "all"
 
     user = get_current_user()
     completed_map = {}
@@ -60,16 +49,25 @@ def index():
         completed_map = {r['manga_id']: r['completed'] for r in hrows}
         conn.close()
 
-    results = []
-    all_tags = set()
-    for m in mangas:
+    # Latest added with pagination (larger block + pages)
+    latest_page = request.args.get('page', 1, type=int) or 1
+    if latest_page < 1:
+        latest_page = 1
+    latest_per_page = 24  # much larger to extend further down
+    all_m = get_all_mangas()
+    total_latest = len(all_m)
+    start_idx = (latest_page - 1) * latest_per_page
+    latest_raw = all_m[start_idx : start_idx + latest_per_page]
+    latest = []
+    all_tags_set = set()
+    for m in latest_raw:
         tags = json.loads(m["tags"]) if m["tags"] else []
         for t in tags:
-            all_tags.add(t)
+            all_tags_set.add(t)
         avg, cnt = compute_rating(m)
         cover = get_cover_url(m, thumb=True)
         is_read = completed_map.get(m['id'], 0) == 1
-        results.append({
+        latest.append({
             "id": m["id"],
             "slug": m["slug"],
             "title": m["title"],
@@ -81,27 +79,69 @@ def index():
             "pages_count": len(json.loads(m["pages"])) if m["pages"] else 0,
             "is_read": is_read,
         })
-
-    if unread_only and user:
-        results = [r for r in results if not r['is_read']]
-    if min_rating > 0:
-        results = [r for r in results if r['rating'] >= min_rating]
-
-    if sort == "rating":
-        results.sort(key=lambda x: -x['rating'])
-    elif sort == "pages":
-        results.sort(key=lambda x: -x['pages_count'])
-    elif sort == "title":
-        results.sort(key=lambda x: x['title'].lower())
+    total_latest_pages = (total_latest + latest_per_page - 1) // latest_per_page if total_latest else 1
 
     recommendations = []
     if user and user.get('is_premium'):
         recommendations = get_recommendations(user['id'], limit=6)
 
+    show_full_library = bool(search or tag or view_all or unread_only or (min_rating > 0) or (sort != "date"))
+
+    if show_full_library:
+        mangas = get_all_mangas(search=search or None, tag=tag or None)
+        if search:
+            s = search.lower()
+            filtered = []
+            for m in mangas:
+                tags = json.loads(m["tags"] or "[]")
+                author = (m["author"] or "").lower() if "author" in (dict(m).keys() if hasattr(m, "keys") else []) else (getattr(m, "author", "") or "").lower()
+                if s in m["title"].lower() or s in author or any(s in t.lower() for t in tags):
+                    filtered.append(m)
+            mangas = filtered
+
+        results = []
+        all_tags = set()
+        for m in mangas:
+            tags = json.loads(m["tags"]) if m["tags"] else []
+            for t in tags:
+                all_tags.add(t)
+            avg, cnt = compute_rating(m)
+            cover = get_cover_url(m, thumb=True)
+            is_read = completed_map.get(m['id'], 0) == 1
+            results.append({
+                "id": m["id"],
+                "slug": m["slug"],
+                "title": m["title"],
+                "author": m["author"] or "",
+                "cover": cover,
+                "tags": tags,
+                "rating": avg,
+                "rating_count": cnt,
+                "pages_count": len(json.loads(m["pages"])) if m["pages"] else 0,
+                "is_read": is_read,
+            })
+
+        if unread_only and user:
+            results = [r for r in results if not r['is_read']]
+        if min_rating > 0:
+            results = [r for r in results if r['rating'] >= min_rating]
+
+        if sort == "rating":
+            results.sort(key=lambda x: -x['rating'])
+        elif sort == "pages":
+            results.sort(key=lambda x: -x['pages_count'])
+        elif sort == "title":
+            results.sort(key=lambda x: x['title'].lower())
+        grid_mangas = results
+        all_tags_out = sorted(all_tags)
+    else:
+        grid_mangas = latest
+        all_tags_out = []
+
     return render_template(
         "index.html",
-        mangas=results,
-        all_tags=sorted(all_tags),
+        mangas=grid_mangas,
+        all_tags=all_tags_out,
         current_search=search,
         current_tag=tag,
         current_user=user,
@@ -109,6 +149,10 @@ def index():
         unread_only=unread_only,
         min_rating=min_rating,
         recommendations=recommendations,
+        show_full_library=show_full_library,
+        latest_mangas=latest,
+        latest_page=latest_page,
+        total_latest_pages=total_latest_pages,
     )
 
 @main_bp.route("/random")
@@ -118,10 +162,12 @@ def random_manga():
     get_db = shared['get_db']
     try:
         user = get_current_user()
+        if not (user and user.get('is_premium')):
+            return redirect(url_for('main.index'))
         conn = get_db()
         query = "SELECT slug FROM mangas"
         params = []
-        if user and request.args.get("unread"):
+        if request.args.get("unread"):
             read_ids = [r['manga_id'] for r in conn.execute(
                 "SELECT manga_id FROM user_history WHERE user_id=? AND completed=1", (user['id'],)).fetchall()]
             if read_ids:
@@ -153,6 +199,114 @@ def tags_page():
             tag_count[t] = tag_count.get(t, 0) + 1
     sorted_tags = sorted(tag_count.items(), key=lambda x: -x[1])
     return render_template("tags.html", tags=sorted_tags, current_user=get_current_user())
+
+
+@main_bp.route("/search")
+def search_page():
+    shared = _get_shared()
+    get_db = shared['get_db']
+    get_current_user = shared['get_current_user']
+    get_cover_url = shared['get_cover_url']
+    compute_rating = shared['compute_rating']
+
+    user = get_current_user()
+    completed_map = {}
+    if user:
+        conn = get_db()
+        hrows = conn.execute("SELECT manga_id, completed FROM user_history WHERE user_id=?", (user['id'],)).fetchall()
+        completed_map = {r['manga_id']: r['completed'] for r in hrows}
+        conn.close()
+
+    q = (request.args.get("q") or "").strip()
+    sort = request.args.get("sort", "date")
+    min_rating = float(request.args.get("min_rating", 0))
+    unread_only = request.args.get("unread") == "1"
+    # Multi tags support: ?tag=foo&tag=bar  or comma separated for convenience
+    raw_tags = request.args.getlist("tag")
+    if not raw_tags:
+        raw_tags = (request.args.get("tags") or "").split(",")
+    selected_tags = [t.strip() for t in raw_tags if t.strip()]
+
+    # Get all unique tags for the nice multi-select UI
+    conn = get_db()
+    tag_rows = conn.execute("SELECT tags FROM mangas").fetchall()
+    all_tags_set = set()
+    for r in tag_rows:
+        for t in (json.loads(r["tags"]) if r["tags"] else []):
+            all_tags_set.add(t)
+    all_tags = sorted(all_tags_set)
+    conn.close()
+
+    # Fetch and filter
+    conn = get_db()
+    mangas = conn.execute("SELECT * FROM mangas").fetchall()
+    conn.close()  # we'll filter in python for multi + search
+
+    results = []
+    for m in mangas:
+        tags = json.loads(m["tags"] or "[]")
+        title = m["title"] or ""
+        author = dict(m).get("author", "") or ""
+        desc = dict(m).get("description", "") or ""
+
+        # multi-tag filter (AND)
+        if selected_tags and not all(t in tags for t in selected_tags):
+            continue
+
+        # text search (title/author/tags)
+        if q:
+            s = q.lower()
+            tag_match = any(s in t.lower() for t in tags)
+            if not (s in title.lower() or s in author.lower() or tag_match):
+                continue
+
+        avg, cnt = compute_rating(m)
+        if min_rating > 0 and avg < min_rating:
+            continue
+
+        is_read = completed_map.get(m["id"], 0) == 1
+        if unread_only and user and is_read:
+            continue
+
+        cover = get_cover_url(m, thumb=True)
+        results.append({
+            "id": m["id"],
+            "slug": m["slug"],
+            "title": title,
+            "author": author,
+            "cover": cover,
+            "tags": tags,
+            "rating": avg,
+            "rating_count": cnt,
+            "pages_count": len(json.loads(m["pages"] or "[]")),
+            "is_read": is_read,
+        })
+
+    # sorting
+    if sort == "rating":
+        results.sort(key=lambda x: -x["rating"])
+    elif sort == "pages":
+        results.sort(key=lambda x: -x["pages_count"])
+    elif sort == "title":
+        results.sort(key=lambda x: x["title"].lower())
+    else:
+        # date-ish (id desc as proxy since no created in this query easily)
+        results.sort(key=lambda x: -x["id"])
+
+    partial = bool(request.args.get('partial'))
+
+    return render_template(
+        "search.html",
+        results=results,
+        q=q,
+        sort=sort,
+        min_rating=min_rating,
+        unread_only=unread_only,
+        selected_tags=selected_tags,
+        all_tags=all_tags,
+        current_user=user,
+        partial=partial,
+    )
 
 @main_bp.route("/manga/<slug>")
 def manga_detail(slug):
@@ -252,6 +406,15 @@ def login():
         user = conn.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password)).fetchone()
         conn.close()
         if user:
+            # Ban check
+            if user.get('banned_until'):
+                try:
+                    import datetime
+                    ban_time = datetime.datetime.fromisoformat(user['banned_until'])
+                    if ban_time > datetime.datetime.utcnow():
+                        return render_template("login.html", error="Аккаунт заблокирован до " + user['banned_until'][:16], users=shared['get_all_users']())
+                except:
+                    pass
             from app import login_user
             login_user(user["id"])
             return redirect(url_for("main.index"))
@@ -349,6 +512,50 @@ def profile():
         recommendations = get_recommendations(user['id'], limit=6)
 
     return render_template("profile.html", user=user, favorites=favorites, history=history, my_ratings=rating_rows, recommendations=recommendations, tag_weights=sorted_weights)
+
+@main_bp.route("/u/<username>")
+def public_showcase(username):
+    shared = _get_shared()
+    get_db = shared['get_db']
+    get_cover_url = shared['get_cover_url']
+    get_user_tag_weights = shared.get('get_user_tag_weights', lambda x: {})
+
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    user_dict = dict(user) if user else {}
+    if not user or not user_dict.get('showcase_public', 1):
+        conn.close()
+        abort(404)
+
+    # Public data only
+    fav_rows = conn.execute("""
+        SELECT m.* FROM mangas m
+        JOIN user_favorites f ON m.id = f.manga_id
+        WHERE f.user_id = ? ORDER BY f.added_at DESC LIMIT 12
+    """, (user['id'],)).fetchall()
+    favorites = []
+    for r in fav_rows:
+        cover = get_cover_url(r, thumb=True)
+        favorites.append({**dict(r), "cover": cover})
+
+    rating_rows = conn.execute("""
+        SELECT m.title, m.slug, ur.score FROM user_ratings ur
+        JOIN mangas m ON m.id = ur.manga_id
+        WHERE ur.user_id = ? ORDER BY ur.rated_at DESC LIMIT 12
+    """, (user['id'],)).fetchall()
+    rating_rows = [dict(r) for r in rating_rows]
+
+    tag_weights = get_user_tag_weights(user['id'])
+    sorted_weights = sorted(tag_weights.items(), key=lambda x: -x[1])[:8]
+
+    conn.close()
+
+    return render_template("public_showcase.html", 
+                           profile_user=user_dict, 
+                           favorites=favorites, 
+                           my_ratings=rating_rows, 
+                           tag_weights=sorted_weights)
+
 
 @main_bp.route("/download/<slug>")
 def download_manga(slug):

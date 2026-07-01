@@ -29,7 +29,7 @@
         <div class="bg-[#111] border border-white/10 rounded-3xl p-5">
             <div class="flex justify-between text-xs text-white/50 mb-2">
                 <div>
-                    <span class="font-semibold text-white">{{ p.username }}</span> 
+                    <a href="/u/{{ p.username }}" class="font-semibold text-white hover:underline">{{ p.username }}</a> 
                     • {{ p.created_at[:16] }}
                     {% if p.updated_at != p.created_at %}<span class="text-[10px]">(отред.)</span>{% endif %}
                 </div>
@@ -49,12 +49,14 @@
             </div>
             {% endif %}
 
-            <!-- Votes -->
-            <div class="flex items-center gap-2 mt-3 text-sm">
-                <button onclick="votePost({{ p.id }}, 1)" class="text-2xl leading-none {{ 'text-green-400' if p.my_vote == 1 else 'text-white/40 hover:text-green-400' }}">✅</button>
+            <!-- Votes: only for the original post (not for comment replies) -->
+            {% if loop.first %}
+            <div class="flex items-center gap-2 mt-3 text-sm" title="Голосовать можно только за основной пост">
+                <button onclick="votePost({{ p.id }}, 1)" class="text-2xl leading-none font-bold {{ 'text-green-400' if p.my_vote == 1 else 'text-white/40 hover:text-green-400' }}">^</button>
                 <span id="score-{{ p.id }}" class="font-mono px-1 {{ 'text-green-400' if p.score > 0 else 'text-red-400' if p.score < 0 else 'text-white/50' }}">{{ p.score }}</span>
-                <button onclick="votePost({{ p.id }}, -1)" class="text-2xl leading-none {{ 'text-red-400' if p.my_vote == -1 else 'text-white/40 hover:text-red-400' }}">❌</button>
+                <button onclick="votePost({{ p.id }}, -1)" class="text-2xl leading-none font-bold {{ 'text-red-400' if p.my_vote == -1 else 'text-white/40 hover:text-red-400' }}">v</button>
             </div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>

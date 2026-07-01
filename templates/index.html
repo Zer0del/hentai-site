@@ -3,168 +3,186 @@
 {% block title %}FAKKU • Библиотека{% endblock %}
 
 {% block content %}
-<div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-12">
-    <!-- Header -->
-    <div class="flex items-end justify-between mb-6">
-        <div>
-            <div class="uppercase tracking-[3px] text-xs text-white/50 font-medium">Библиотека</div>
-            <h1 class="text-4xl font-semibold tracking-tighter">Все тайтлы</h1>
-        </div>
-        
-        <div class="flex items-center gap-x-3">
-            <a href="/tags" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
-                <i class="fa-solid fa-tags"></i> 
-                <span>Теги</span>
-            </a>
-            <a href="/random" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
-                <i class="fa-solid fa-dice"></i> 
-                <span>Случайная</span>
-            </a>
-            {% if current_user %}
-            <a href="/random?unread=1" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
-                <i class="fa-solid fa-dice"></i> 
-                <span>Непрочитанная</span>
-            </a>
-            {% endif %}
-            {% if current_search or current_tag %}
-            <a href="/" class="text-xs flex items-center gap-x-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10">
-                <i class="fa-solid fa-times"></i> 
-                <span>Сбросить фильтры</span>
-            </a>
-            {% endif %}
-            {% if current_user and current_user.get('is_admin') %}
-            <button onclick="showAddModal()"
-                    class="flex items-center gap-x-2 text-sm font-semibold px-5 py-2.5 bg-[#e11d48] hover:bg-[#be123c] rounded-full transition text-white">
-                <i class="fa-solid fa-plus"></i>
-                <span>Добавить мангу</span>
-            </button>
-            {% endif %}
-        </div>
-    </div>
+<div class="max-w-screen-2xl mx-auto px-6 pt-6 pb-12">
+    <!-- Clean minimalist start: no "Открытия" block. Global nav search is used. Directly to content. -->
 
     {% if recommendations %}
+    <!-- Premium Recommendations -->
     <div class="mb-8">
-        <div class="uppercase tracking-widest text-xs text-white/50 mb-2">Вам может понравиться</div>
-        <div class="grid-manga">
+        <div class="flex items-center justify-between mb-3 px-1">
+            <h2 class="section-head text-xl font-semibold tracking-tight text-white">Рекомендации для вас</h2>
+            <a href="/?view=all" class="text-xs px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition flex items-center gap-1">Вся библиотека <span class="text-[10px]">→</span></a>
+        </div>
+        <div class="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-white/20 -mx-1 px-1">
             {% for m in recommendations %}
-            <a href="/manga/{{ m.slug }}" class="block group">
-                <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
-                    <img src="{{ m.cover }}" class="manga-cover w-full transition group-hover:scale-[1.015]" onerror="this.src='https://picsum.photos/id/1011/300/400'">
-                    <div class="px-3 py-3">
-                        <div class="manga-title font-semibold text-[15px] leading-tight">{{ m.title }}</div>
-                        {% if m.author %}
-                        <div class="text-[11px] text-white/50 mt-0.5">{{ m.author }}</div>
+            <a href="/manga/{{ m.slug }}" class="block group w-40 sm:w-44 flex-shrink-0 snap-start">
+                <div class="rounded-2xl overflow-hidden border border-white/10 bg-[#111] shadow-lg modern-card group-hover:shadow-xl group-hover:-translate-y-[1px]">
+                    <div class="relative">
+                        <img src="{{ m.cover }}" class="w-full aspect-[3/4] object-cover transition duration-200 group-hover:scale-[1.02]" onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                        {% set r = m.rating or m.avg_rating or 0 %}
+                        {% if r > 0 %}
+                        <div class="absolute top-2 left-2 text-[10px] px-1.5 py-px bg-black/75 backdrop-blur rounded text-white/95 flex items-center gap-px font-medium">
+                            <i class="fa-solid fa-star text-amber-400 text-[9px]"></i> <span class="ml-px">{{ '%.1f'|format(r) }}</span>
+                        </div>
                         {% endif %}
-                        {% if m.author %}
-                        <div class="text-[11px] text-white/50 mt-0.5">{{ m.author }}</div>
-                        {% endif %}
+                    </div>
+                    <div class="px-3 py-2">
+                        <div class="font-semibold text-[13px] leading-snug line-clamp-2 group-hover:text-[#e11d48] transition-colors">{{ m.title }}</div>
+                        {% if m.author %}<div class="text-[10px] text-white/50 mt-0.5 truncate">{{ m.author }}</div>{% endif %}
                     </div>
                 </div>
             </a>
             {% endfor %}
         </div>
+        <div class="text-[10px] text-white/35 mt-1 px-1">На основе ваших оценок и избранного</div>
     </div>
     {% endif %}
 
-    <!-- Filters -->
-    <div class="mb-6 flex flex-wrap items-center gap-4">
-        <div>
-            <select onchange="updateFilter('sort', this.value)" class="bg-white/5 border border-white/10 text-sm rounded-xl px-3 py-1">
-                <option value="date" {{ 'selected' if current_sort == 'date' or not current_sort }}>По дате</option>
-                <option value="rating" {{ 'selected' if current_sort == 'rating' }}>По рейтингу</option>
-                <option value="pages" {{ 'selected' if current_sort == 'pages' }}>По кол-ву страниц</option>
-                <option value="title" {{ 'selected' if current_sort == 'title' }}>По названию</option>
-            </select>
-        </div>
-
-        {% if current_user %}
-        <label class="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" {{ 'checked' if unread_only }} onchange="updateFilter('unread', this.checked ? '1' : '')" class="accent-[#e11d48]">
-            Только непрочитанные
-        </label>
-        {% endif %}
-
-        <div class="flex items-center gap-2 text-sm">
-            <span>Мин. рейтинг:</span>
-            <input type="number" step="0.5" min="0" max="5" value="{{ min_rating }}" onchange="updateFilter('min_rating', this.value)" class="w-16 bg-white/5 border border-white/10 rounded px-2 py-0.5 text-sm">
-        </div>
-
-        <a href="/tags" class="text-xs px-3 py-1 bg-white/5 rounded-full hover:bg-white/10">Все теги →</a>
-    </div>
-
-    <!-- Filters: Tags -->
-    {% if all_tags %}
+    <!-- Latest Added: prominent only in discovery mode (modern, not overloaded) -->
+    {% if not show_full_library %}
     <div class="mb-6">
-        <div class="text-xs uppercase tracking-widest text-white/50 mb-2 font-medium">Фильтр по тегам</div>
-        <div class="flex flex-wrap gap-2">
-            {% for tag in all_tags %}
-            <a href="/?tag={{ tag|urlencode }}" 
-               class="tag-pill cursor-pointer px-3.5 py-1 text-xs {{ 'bg-[#e11d48] text-white' if current_tag == tag else '' }}">
-                {{ tag }}
+        <div class="flex items-end justify-between mb-3">
+            <div>
+                <span class="uppercase tracking-[3px] text-xs text-white/50 font-medium">Свежее</span>
+                <h2 class="text-2xl tracking-tighter font-semibold">Последние добавления</h2>
+            </div>
+            <a href="/?view=all" class="text-sm px-4 py-1 rounded-2xl bg-white/5 hover:bg-white/10 transition flex items-center gap-1.5">
+                <span>Полная библиотека</span> <i class="fa-solid fa-arrow-right text-xs"></i>
+            </a>
+        </div>
+
+        <!-- Discovery grid - larger latest block with pagination -->
+        {% if latest_mangas %}
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
+            {% for m in latest_mangas %}
+            <a href="/manga/{{ m.slug }}" class="block group">
+                <div class="fakku-card rounded-2xl overflow-hidden border border-white/5 bg-[#111] transition-all duration-200 group-hover:border-white/20 group-hover:shadow-xl">
+                    <div class="relative">
+                        <img src="{{ m.cover }}" 
+                             alt="{{ m.title }}"
+                             class="manga-cover w-full transition duration-200 group-hover:scale-[1.015]"
+                             onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                        
+                        <div class="absolute bottom-2 right-2 bg-black/75 text-white text-[10px] font-mono px-1.5 py-px rounded">
+                            {{ m.pages_count }} стр.
+                        </div>
+                        
+                        {% if m.rating > 0 %}
+                        <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-xs text-white/90">
+                            <i class="fa-solid fa-star text-[#f59e0b] text-[10px]"></i>
+                            <span class="font-medium ml-0.5">{{ '%.1f'|format(m.rating) }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="px-3 py-2.5">
+                        <div class="manga-title font-semibold text-[13.5px] leading-snug text-white group-hover:text-[#e11d48] transition" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">{{ m.title }}</div>
+                        {% if m.author %}
+                        <div class="text-[10px] text-white/50 mt-0.5">{{ m.author }}</div>
+                        {% endif %}
+
+                        {% if m.tags %}
+                        <div class="flex flex-wrap gap-x-1 gap-y-px mt-1.5">
+                            {% for t in m.tags[:4] %}
+                            <span class="text-[10px] bg-white/5 px-1.5 py-px rounded text-white/55">{{ t }}</span>
+                            {% endfor %}
+                            {% if m.tags|length > 4 %}<span class="text-[10px] text-white/35">ещё {{ m.tags|length - 4 }}</span>{% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
             </a>
             {% endfor %}
         </div>
+
+        <!-- Pagination for latest added -->
+        {% if total_latest_pages and total_latest_pages > 1 %}
+        <div class="flex justify-center items-center gap-2 mt-6 text-sm">
+            {% if latest_page > 1 %}
+            <a href="?page={{ latest_page - 1 }}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">← Назад</a>
+            {% endif %}
+            <span class="text-white/50 px-2">Страница {{ latest_page }} / {{ total_latest_pages }}</span>
+            {% if latest_page < total_latest_pages %}
+            <a href="?page={{ latest_page + 1 }}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">Вперёд →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endif %}
     </div>
     {% endif %}
 
-    <!-- Grid -->
-    {% if mangas %}
-    <div class="grid-manga">
-        {% for m in mangas %}
-        <a href="/manga/{{ m.slug }}" class="block group">
-            <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
-                <!-- Cover -->
-                <div class="relative">
-                    <img src="{{ m.cover }}" 
-                         alt="{{ m.title }}"
-                         class="manga-cover w-full transition group-hover:scale-[1.015]"
-                         onerror="this.src='https://picsum.photos/id/1011/300/400'">
-                    
-                    <!-- Pages badge -->
-                    <div class="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-mono px-2 py-px rounded">
-                        {{ m.pages_count }} стр.
-                    </div>
-                    
-                    <!-- Rating badge -->
-                    {% if m.rating > 0 %}
-                    <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-xs">
-                        <i class="fa-solid fa-star text-[#f59e0b] text-[10px]"></i>
-                        <span class="font-medium ml-0.5">{{ '%.1f'|format(m.rating) }}</span>
-                    </div>
-                    {% endif %}
+    <!-- Bottom quick links removed per request -->
 
-                    {% if m.is_read %}
-                    <div class="absolute top-2 right-2 bg-emerald-600/80 text-white text-[10px] px-1.5 py-px rounded">Прочитано</div>
-                    {% endif %}
-                </div>
+    <!-- Full library grid (when filters or explicit view) -->
+    {% if mangas and show_full_library %}
+      <div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm border-b border-white/10 pb-3">
+          <select onchange="updateFilter('sort', this.value)" class="bg-white/5 border border-white/10 text-sm rounded-xl px-3 py-1">
+              <option value="date" {{ 'selected' if current_sort == 'date' or not current_sort }}>По дате</option>
+              <option value="rating" {{ 'selected' if current_sort == 'rating' }}>По рейтингу</option>
+              <option value="pages" {{ 'selected' if current_sort == 'pages' }}>По страницам</option>
+              <option value="title" {{ 'selected' if current_sort == 'title' }}>По названию</option>
+          </select>
 
-                <!-- Info -->
-                <div class="px-3 py-3">
-                    <div class="manga-title font-semibold text-[15px] leading-tight text-white group-hover:text-[#e11d48] transition">
-                        {{ m.title }}
-                    </div>
-                    
-                    {% if m.tags %}
-                    <div class="flex flex-wrap gap-x-1 gap-y-1 mt-2">
-                        {% for t in m.tags[:3] %}
-                        <span class="text-[10px] bg-white/5 px-1.5 py-px rounded text-white/60">{{ t }}</span>
-                        {% endfor %}
-                        {% if m.tags|length > 3 %}<span class="text-[10px] text-white/40">+{{ m.tags|length - 3 }}</span>{% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </a>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="text-center py-20 border border-dashed border-white/15 rounded-3xl">
-        <i class="fa-solid fa-book text-5xl text-white/20 mb-4"></i>
-        <div class="text-xl font-medium text-white/70">Манга не найдена</div>
-        <p class="text-white/40 mt-2">Добавьте первую мангу через кнопку «Добавить мангу» выше или в админке</p>
-        {% if current_user and current_user.get('is_admin') %}
-        <button onclick="showAddModal()" class="mt-6 fakku-btn px-7 py-3 rounded-2xl font-semibold">Добавить первую мангу</button>
-        {% endif %}
+          {% if current_user %}
+          <label class="flex items-center gap-1.5 text-sm cursor-pointer text-white/80">
+              <input type="checkbox" {{ 'checked' if unread_only }} onchange="updateFilter('unread', this.checked ? '1' : '')" class="accent-[#e11d48]">
+              Непрочитанные
+          </label>
+          {% endif %}
+
+          <div class="flex items-center gap-1.5 text-sm text-white/80">
+              <span class="text-xs">Мин. рейтинг</span>
+              <input type="number" step="0.5" min="0" max="10" value="{{ min_rating }}" onchange="updateFilter('min_rating', this.value)" class="w-14 bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 text-sm">
+          </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
+          {% for m in mangas %}
+          <a href="/manga/{{ m.slug }}" class="block group">
+              <div class="fakku-card rounded-2xl overflow-hidden border modern-card">
+                  <div class="relative">
+                      <img src="{{ m.cover }}" 
+                           alt="{{ m.title }}"
+                           class="manga-cover w-full transition duration-200 group-hover:scale-[1.015]"
+                           onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                      
+                      <div class="absolute bottom-2 right-2 bg-black/75 text-[10px] font-mono px-1.5 py-px rounded text-white/90">
+                          {{ m.pages_count }} стр.
+                      </div>
+                      
+                      {% if m.rating > 0 %}
+                      <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-xs text-white/90">
+                          <i class="fa-solid fa-star text-[#f59e0b] text-[10px]"></i>
+                          <span class="font-medium ml-0.5">{{ '%.1f'|format(m.rating) }}</span>
+                      </div>
+                      {% endif %}
+
+                      {% if m.is_read %}
+                      <div class="absolute top-2 right-2 bg-emerald-600/70 text-white text-[10px] px-1.5 py-px rounded">Прочитано</div>
+                      {% endif %}
+                  </div>
+
+                  <div class="px-3 py-2.5">
+                      <div class="manga-title font-semibold text-[13.5px] leading-snug text-white group-hover:text-[#e11d48] transition">{{ m.title }}</div>
+                      
+                      {% if m.tags %}
+                      <div class="flex flex-wrap gap-x-1 gap-y-px mt-1.5">
+                          {% for t in m.tags[:4] %}
+                          <span class="text-[10px] bg-white/5 px-1.5 py-px rounded text-white/55">{{ t }}</span>
+                          {% endfor %}
+                          {% if m.tags|length > 4 %}<span class="text-[10px] text-white/35">ещё {{ m.tags|length - 4 }}</span>{% endif %}
+                      </div>
+                      {% endif %}
+                  </div>
+              </div>
+          </a>
+          {% endfor %}
+      </div>
+    {% elif not mangas %}
+    <div class="text-center py-16 border border-white/10 rounded-2xl">
+        <i class="fa-solid fa-book text-4xl text-white/20 mb-3"></i>
+        <div class="text-lg font-medium text-white/70">Ничего не найдено</div>
+        <p class="text-white/40 text-sm mt-1">Попробуйте изменить запрос или добавьте новую мангу в админке</p>
     </div>
     {% endif %}
 </div>

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Пользователи • Админ{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-2xl mx-auto px-6 py-8">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-3xl font-semibold">Управление пользователями</h1>
+        <a href="/admin" class="text-sm px-4 py-2 bg-white/5 rounded-xl">← Назад в админку</a>
+    </div>
+
+    <div class="overflow-x-auto bg-[#111] rounded-2xl border border-white/10">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-white/10 text-white/50">
+                    <th class="text-left px-4 py-3">ID</th>
+                    <th class="text-left px-4 py-3">Username</th>
+                    <th class="text-left px-4 py-3">Дата регистрации</th>
+                    <th class="px-4 py-3">Premium</th>
+                    <th class="px-4 py-3">Admin</th>
+                    <th class="px-4 py-3">Рейтинги</th>
+                    <th class="px-4 py-3">Избранное</th>
+                    <th class="px-4 py-3">Комм. под мангой</th>
+                    <th class="px-4 py-3">Посты на форуме</th>
+                    <th class="px-4 py-3">Вес тегов (топ)</th>
+                    <th class="px-4 py-3">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="px-4 py-3 font-mono text-white/70">{{ u.id }}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            {% if u.avatar %}
+                            <img src="/uploads/avatars/{{ u.avatar }}" class="w-6 h-6 rounded-full object-cover">
+                            {% endif %}
+                            <span style="color: {{ u.username_color or '#e11d48' }}">{{ u.username }}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-white/60">{{ u.created_at[:16] if u.created_at else '-' }}</td>
+                    <td class="px-4 py-3 text-center">{{ '✓' if u.is_premium else '' }}</td>
+                    <td class="px-4 py-3 text-center">{{ '✓' if u.is_admin else '' }}</td>
+                    <td class="px-4 py-3 text-center">{{ u.ratings_count }}</td>
+                    <td class="px-4 py-3 text-center">{{ u.favs_count }}</td>
+                    <td class="px-4 py-3 text-center">{{ u.comments_count }}</td>
+                    <td class="px-4 py-3 text-center">{{ u.forum_posts_count }}</td>
+                    <td class="px-4 py-3 text-xs">
+                        {% for tag, w in u.top_weights[:3] %}
+                        <span class="inline-block mr-1 {{ 'text-emerald-400' if w>0 else 'text-red-400' }}">{{ tag }}:{{ w }}</span>
+                        {% endfor %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-wrap gap-1 text-xs">
+                            <button onclick="setVip({{ u.id }}, {{ 1 if not u.is_premium else 0 }})" 
+                                    class="px-2 py-0.5 bg-emerald-700/60 hover:bg-emerald-700 rounded">
+                                {{ 'Забрать VIP' if u.is_premium else 'Дать VIP' }}
+                            </button>
+                            <button onclick="banUser({{ u.id }}, '{{ u.username }}')" 
+                                    class="px-2 py-0.5 bg-red-700/60 hover:bg-red-700 rounded">Бан</button>
+                            {% if u.banned_until %}
+                            <span class="text-red-400 text-[10px]">до {{ u.banned_until[:16] }}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="mt-4 text-xs text-white/40">Всего пользователей: {{ users|length }}</div>
+</div>
+
+<script>
+async function setVip(userId, give) {
+    if (!confirm(give ? 'Дать VIP?' : 'Забрать VIP?')) return;
+    const fd = new FormData();
+    fd.append('user_id', userId);
+    fd.append('give', give);
+    const res = await fetch('/admin/api/set_vip', {method:'POST', body: fd});
+    const j = await res.json();
+    if (j.ok) location.reload();
+    else alert(j.error || 'Ошибка');
+}
+
+async function banUser(userId, username) {
+    const duration = prompt(`Забанить ${username} на сколько?\nПримеры: 1h, 24h, 7d, 30d, permanent`, '24h');
+    if (!duration) return;
+    const fd = new FormData();
+    fd.append('user_id', userId);
+    fd.append('duration', duration);
+    const res = await fetch('/admin/api/ban_user', {method:'POST', body: fd});
+    const j = await res.json();
+    if (j.ok) location.reload();
+    else alert(j.error || 'Ошибка');
+}
+</script>
+{% endblock %}

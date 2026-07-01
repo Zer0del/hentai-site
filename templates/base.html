@@ -29,50 +29,39 @@
         }
 
         .fakku-card {
-            background-color: #111111;
+            background-color: #111;
             transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
-                        box-shadow 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+                        box-shadow 0.2s cubic-bezier(0.4, 0.0, 0.2, 1),
+                        border-color 0.2s ease;
+            border-color: rgba(255,255,255,0.06);
         }
         
         .fakku-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.2);
+            border-color: rgba(255,255,255,0.12);
         }
-
 
         .manga-cover {
             aspect-ratio: 3 / 4;
             object-fit: cover;
-            background-color: #1a1a1a;
+            background-color: #111;
             image-rendering: auto;
         }
 
         .nav-link {
-            transition: color 0.1s ease;
+            transition: color 0.15s ease;
+            font-weight: 500;
         }
         
         .nav-link:hover {
             color: #e11d48;
         }
 
-        .tag-pill {
-            background-color: #1f1f1f;
-            color: #d1d5db;
-            font-size: 0.75rem;
-            padding: 1px 9px;
-            border-radius: 9999px;
-            transition: background 0.1s;
-        }
-        
-        .tag-pill:hover {
-            background-color: #e11d48;
-            color: white;
-        }
-
         .section-title {
             font-size: 1.25rem;
             font-weight: 600;
-            letter-spacing: -.025em;
+            letter-spacing: -.02em;
         }
 
         .star {
@@ -99,6 +88,16 @@
             cursor: pointer;
         }
 
+        /* Minimalist modern touches */
+        h1, h2, .section-head {
+            letter-spacing: -0.025em;
+        }
+
+        .modern-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Reader navigation zones */
         .reader-nav-zone.left { left: 0; }
         .reader-nav-zone.right { right: 0; }
 
@@ -158,9 +157,9 @@
 </head>
 <body class="fakku-dark min-h-screen">
     <!-- Navbar -->
-    <nav class="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-lg border-b border-white/10">
+    <nav class="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
         <div class="max-w-screen-2xl mx-auto">
-            <div class="px-6 h-16 flex items-center justify-between">
+            <div class="px-6 h-14 flex items-center justify-between">
                 <div class="flex items-center gap-x-8">
                     <!-- Logo -->
                     <a href="/" class="flex items-center gap-x-2 group">
@@ -172,8 +171,8 @@
                     
                     <!-- Nav links -->
                     <div class="hidden md:flex items-center gap-x-6 text-sm font-medium">
-                        <a href="/" class="nav-link text-white/90 hover:text-white">Библиотека</a>
-                        <a href="/forum" class="nav-link text-white/90 hover:text-white">Форум</a>
+                        <a href="/" class="nav-link text-white/85 hover:text-white">Библиотека</a>
+                        <a href="/forum" class="nav-link text-white/85 hover:text-white">Форум</a>
                         {% set user = current_user if current_user is defined else None %}
                         {% if user and user.get('is_admin') %}
                         <a href="/admin" class="nav-link text-white/70 hover:text-white flex items-center gap-x-1.5">
@@ -188,16 +187,13 @@
                     </div>
                 </div>
 
-                <!-- Search -->
-                <div class="flex-1 max-w-md mx-6">
-                    <div class="relative group">
-                        <input id="global-search"
-                               type="text" 
-                               placeholder="Поиск манги..." 
-                               class="w-full bg-white/5 border border-white/10 focus:border-[#e11d48]/60 focus:bg-white/10 text-sm rounded-full pl-10 py-2.5 outline-none transition placeholder:text-white/40"
-                               onkeypress="if (event.key === 'Enter') window.location.href='/?q=' + encodeURIComponent(this.value)">
-                        <i class="fa-solid fa-search absolute left-4 top-3.5 text-white/40 text-sm"></i>
-                    </div>
+                <!-- Search button (opens dedicated convenient search page) -->
+                <div class="flex-1 max-w-[140px] mx-4">
+                    <a href="/search" 
+                       class="flex items-center justify-center gap-x-2 w-full px-4 py-2 text-sm font-medium bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition">
+                        <i class="fa-solid fa-search"></i>
+                        <span>Поиск</span>
+                    </a>
                 </div>
 
                 <div class="flex items-center gap-x-3">
@@ -249,13 +245,37 @@
         }
         initTailwind();
 
-        // Simple global search enter handled above, bonus live filter on index if present
-        function setupGlobalSearch() {
-            const input = document.getElementById('global-search');
-            if (!input) return;
-            // If on homepage it will redirect
+        // Search is a button that leads to the dedicated /search page
+
+        // Smooth image loading - each image appears as soon as it loads (not waiting for all)
+        function initSmoothImages() {
+            const imgs = document.querySelectorAll('img.manga-cover, img.reader-image, .grid img, #results-container img, .showcase-img, img[loading="lazy"]');
+            imgs.forEach(img => {
+                // If already loaded (cache), show immediately
+                if (img.complete && img.naturalWidth !== 0) {
+                    img.classList.add('loaded');
+                } else {
+                    img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+                    img.addEventListener('error', () => img.classList.add('loaded'), { once: true });
+                }
+            });
         }
-        setupGlobalSearch();
+
+        // Call early so listeners attach before images start loading
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initSmoothImages);
+        } else {
+            initSmoothImages();
+        }
+
+        // Expose for dynamic content (search results, etc.)
+        window.initSmoothImages = initSmoothImages;
+
+        // Also re-init after any full page load just in case
+        window.addEventListener('load', () => {
+            // small delay for any late images
+            setTimeout(initSmoothImages, 100);
+        });
     </script>
     {% block scripts %}{% endblock %}
 </body>
