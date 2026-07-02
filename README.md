@@ -102,6 +102,31 @@ uploads/manga/<slug>/
 data/manga.db
 ```
 
+## Production deployment (VPS with Nginx + Gunicorn)
+
+For deployment on VPS (like the hentach.ru setup):
+
+1. Use gunicorn:
+   ```bash
+   gunicorn -w 4 --bind 0.0.0.0:8000 app:app
+   ```
+
+2. Nginx config (see `nginx.conf` in project root for full example):
+   - Set `client_max_body_size 2G;` to allow large manga uploads (many pages or big ZIPs).
+   - Proxy / to gunicorn.
+   - Serve /uploads and /static directly from nginx for speed.
+
+3. Important: the 413 error on /api/add_manga means your reverse proxy (Nginx) has a low upload limit. Use the included `nginx.conf`.
+
+4. Set env vars:
+   - FAKKU_ADMIN_PASS=yoursecret
+   - ALLOWED_IPS= (if using IP whitelist, but removed)
+
+5. For large uploads, make sure disk space and memory are sufficient. Use ZIP for many pages.
+
+The Tailwind CDN warning is harmless for this project (it's dev convenience); for full prod you can build Tailwind, but not required.
+```
+
 ## Качество читалки
 
 Читалка построена с нуля специально под классическую мангу:

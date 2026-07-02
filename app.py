@@ -155,7 +155,7 @@ def create_app():
     """Application factory - makes the project easier to maintain, test and extend."""
     app = Flask(__name__)
     app.secret_key = _get_secret_key()
-    app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB max upload
+    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2GB max upload - remove any size limits for large manga archives with many pages
 
     # Register modular blueprints (routes split out of this file)
     from blueprints.main import main_bp
