@@ -274,7 +274,7 @@ let bottomVisible = false;
 let isTouchDevice = false;
 
 let hideBottomTimeout = null;
-const BOTTOM_HIDE_DELAY = 1500; // 1.5 секунды — лента исчезает после бездействия мыши
+const BOTTOM_HIDE_DELAY = 500; // 0.5 секунды — полоска с страницами исчезает после бездействия мыши
 
 let lastSingleTouchX = 0;
 let lastSingleTouchY = 0;
@@ -358,15 +358,23 @@ function renderCurrentImage() {
         
         const img1 = document.createElement('img');
         img1.className = 'reader-image';
+        img1.style.opacity = '0';
+        img1.style.transition = 'opacity 0.2s ease';
         img1.src = getPageUrl(leftIdx);
         img1.decoding = 'async';
         img1.fetchPriority = 'high';
+        img1.onerror = () => { img1.src = 'https://picsum.photos/id/1011/600/800'; };
+        img1.onload = () => { img1.style.opacity = '1'; };
         
         const img2 = document.createElement('img');
         img2.className = 'reader-image';
+        img2.style.opacity = '0';
+        img2.style.transition = 'opacity 0.2s ease';
         img2.src = getPageUrl(rightIdx);
         img2.decoding = 'async';
         if (leftIdx === rightIdx) img2.fetchPriority = 'high';
+        img2.onerror = () => { img2.src = 'https://picsum.photos/id/1011/600/800'; };
+        img2.onload = () => { img2.style.opacity = '1'; };
         
         wrapper.appendChild(img1);
         if (leftIdx !== rightIdx) wrapper.appendChild(img2);
@@ -374,9 +382,13 @@ function renderCurrentImage() {
         wrapper.classList.remove('double-page');
         const img = document.createElement('img');
         img.className = 'reader-image';
+        img.style.opacity = '0';
+        img.style.transition = 'opacity 0.2s ease';
         img.src = getPageUrl(idx);
         img.decoding = 'async';
         img.fetchPriority = 'high';
+        img.onerror = () => { img.src = 'https://picsum.photos/id/1011/600/800'; };
+        img.onload = () => { img.style.opacity = '1'; };
         wrapper.appendChild(img);
     }
     
@@ -437,9 +449,17 @@ function goToPage(page, animate = true) {
     if (page === currentPage && animate) return;
     
     currentPage = page;
+
+    // Ensure the pages we are about to show are preloaded (fixes black screen on flip and return)
+    const idx = currentPage - 1;
+    preloadPages(idx, idx + (isDouble ? 1 : 0));
+    if (isDouble) {
+        preloadPages(idx + 1, idx + 1);
+    }
+
     renderCurrentImage();
 
-    // Preload several pages ahead immediately (prevents black flash on fast flip)
+    // Preload several pages ahead for future flips
     setTimeout(preloadAdjacent, 30);
 
     // Track progress for logged in users
@@ -459,10 +479,12 @@ function goToPage(page, animate = true) {
 function nextPage() {
     let next = currentPage + (isDouble ? 2 : 1);
     if (next > TOTAL_PAGES) next = TOTAL_PAGES;
+    // Preload the target page immediately
+    const idx = next - 1;
+    preloadPages(idx, idx + (isDouble ? 1 : 0));
     goToPage(next);
     // Extra preload forward for fast paging
     setTimeout(() => {
-        const idx = next - 1;
         preloadPages(idx, idx + (isDouble ? 6 : 5));
     }, 50);
 }
@@ -470,6 +492,8 @@ function nextPage() {
 function prevPage() {
     let prev = currentPage - (isDouble ? 2 : 1);
     if (prev < 1) prev = 1;
+    const idx = prev - 1;
+    preloadPages(idx, idx + (isDouble ? 1 : 0));
     goToPage(prev);
 }
 

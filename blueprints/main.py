@@ -8,7 +8,8 @@ def _get_shared():
     from app import (
         get_all_mangas, get_current_user, get_db, get_recommendations,
         get_cover_url, compute_rating, get_manga_by_slug, get_page_urls,
-        get_all_users, get_user_tag_weights, natural_sort_key
+        get_all_users, get_user_tag_weights, natural_sort_key,
+        get_all_tags
     )
     return {
         'get_all_mangas': get_all_mangas,
@@ -21,6 +22,7 @@ def _get_shared():
         'get_page_urls': get_page_urls,
         'get_all_users': get_all_users,
         'get_user_tag_weights': get_user_tag_weights,
+        'get_all_tags': get_all_tags,
         'natural_sort_key': natural_sort_key,
     }
 
@@ -38,7 +40,7 @@ def index():
     tag = request.args.get("tag", "").strip()
     sort = request.args.get("sort", "date")
     unread_only = request.args.get("unread") == "1"
-    min_rating = float(request.args.get("min_rating", 0))
+    min_rating = float(request.args.get("min_rating") or 0)
     view_all = request.args.get("view") == "all"
 
     user = get_current_user()
@@ -49,15 +51,19 @@ def index():
         completed_map = {r['manga_id']: r['completed'] for r in hrows}
         conn.close()
 
-    # Latest added with pagination (larger block + pages)
+    # Latest added with pagination (larger block + pages) - efficient
     latest_page = request.args.get('page', 1, type=int) or 1
     if latest_page < 1:
         latest_page = 1
     latest_per_page = 24  # much larger to extend further down
-    all_m = get_all_mangas()
-    total_latest = len(all_m)
     start_idx = (latest_page - 1) * latest_per_page
-    latest_raw = all_m[start_idx : start_idx + latest_per_page]
+    latest_raw = get_all_mangas(limit=latest_per_page, offset=start_idx)
+
+    # Efficient total count (no full load)
+    db_conn = get_db()
+    total_latest = db_conn.execute("SELECT COUNT(*) as c FROM mangas").fetchone()["c"]
+    db_conn.close()
+
     latest = []
     all_tags_set = set()
     for m in latest_raw:
@@ -88,7 +94,9 @@ def index():
     show_full_library = bool(search or tag or view_all or unread_only or (min_rating > 0) or (sort != "date"))
 
     if show_full_library:
-        mangas = get_all_mangas(search=search or None, tag=tag or None)
+        # Unified with /search page (better multi-tag, live, nice UI)
+        qs = request.query_string.decode()
+        return redirect('/search' + ('?' + qs if qs else ''))
         if search:
             s = search.lower()
             filtered = []
@@ -208,6 +216,7 @@ def search_page():
     get_current_user = shared['get_current_user']
     get_cover_url = shared['get_cover_url']
     compute_rating = shared['compute_rating']
+    get_all_mangas = shared['get_all_mangas']
 
     user = get_current_user()
     completed_map = {}
@@ -219,7 +228,7 @@ def search_page():
 
     q = (request.args.get("q") or "").strip()
     sort = request.args.get("sort", "date")
-    min_rating = float(request.args.get("min_rating", 0))
+    min_rating = float(request.args.get("min_rating") or 0)
     unread_only = request.args.get("unread") == "1"
     # Multi tags support: ?tag=foo&tag=bar  or comma separated for convenience
     raw_tags = request.args.getlist("tag")
@@ -227,38 +236,24 @@ def search_page():
         raw_tags = (request.args.get("tags") or "").split(",")
     selected_tags = [t.strip() for t in raw_tags if t.strip()]
 
-    # Get all unique tags for the nice multi-select UI
-    conn = get_db()
-    tag_rows = conn.execute("SELECT tags FROM mangas").fetchall()
-    all_tags_set = set()
-    for r in tag_rows:
-        for t in (json.loads(r["tags"]) if r["tags"] else []):
-            all_tags_set.add(t)
-    all_tags = sorted(all_tags_set)
-    conn.close()
+    # Get all unique tags for the nice multi-select UI - use cached version
+    get_all_tags_fn = shared.get('get_all_tags', lambda: [])
+    all_tags = get_all_tags_fn()
 
-    # Fetch and filter
-    conn = get_db()
-    mangas = conn.execute("SELECT * FROM mangas").fetchall()
-    conn.close()  # we'll filter in python for multi + search
+    # Optimized: use get_all_mangas for text search (uses indexed LIKE)
+    search_for_query = q if q else None
+    # Load more than page to allow filtering, then paginate
+    mangas = get_all_mangas(search=search_for_query, limit=200)  # reasonable cap for perf
 
     results = []
     for m in mangas:
         tags = json.loads(m["tags"] or "[]")
         title = m["title"] or ""
         author = dict(m).get("author", "") or ""
-        desc = dict(m).get("description", "") or ""
 
-        # multi-tag filter (AND)
+        # multi-tag filter (AND) - python is fine after limited fetch
         if selected_tags and not all(t in tags for t in selected_tags):
             continue
-
-        # text search (title/author/tags)
-        if q:
-            s = q.lower()
-            tag_match = any(s in t.lower() for t in tags)
-            if not (s in title.lower() or s in author.lower() or tag_match):
-                continue
 
         avg, cnt = compute_rating(m)
         if min_rating > 0 and avg < min_rating:
@@ -293,11 +288,19 @@ def search_page():
         # date-ish (id desc as proxy since no created in this query easily)
         results.sort(key=lambda x: -x["id"])
 
+    # Pagination for search
+    search_page = request.args.get('page', 1, type=int) or 1
+    if search_page < 1: search_page = 1
+    per_page = 24
+    start = (search_page - 1) * per_page
+    paged_results = results[start : start + per_page]
+    total_search_pages = (len(results) + per_page - 1) // per_page if results else 1
+
     partial = bool(request.args.get('partial'))
 
     return render_template(
         "search.html",
-        results=results,
+        results=paged_results,
         q=q,
         sort=sort,
         min_rating=min_rating,
@@ -306,6 +309,8 @@ def search_page():
         all_tags=all_tags,
         current_user=user,
         partial=partial,
+        search_page=search_page,
+        total_search_pages=total_search_pages,
     )
 
 @main_bp.route("/manga/<slug>")
@@ -478,7 +483,7 @@ def profile():
     fav_rows = conn.execute("""
         SELECT m.* FROM mangas m
         JOIN user_favorites f ON m.id = f.manga_id
-        WHERE f.user_id = ? ORDER BY f.added_at DESC
+        WHERE f.user_id = ? ORDER BY f.added_at DESC LIMIT 100
     """, (user['id'],)).fetchall()
     favorites = []
     for r in fav_rows:
@@ -555,6 +560,18 @@ def public_showcase(username):
                            favorites=favorites, 
                            my_ratings=rating_rows, 
                            tag_weights=sorted_weights)
+
+
+@main_bp.route("/recommendations")
+def recommendations_page():
+    shared = _get_shared()
+    get_current_user = shared['get_current_user']
+    get_recommendations = shared.get('get_recommendations', lambda x, limit=20: [])
+    user = get_current_user()
+    if not user or not user.get('is_premium'):
+        return redirect(url_for('main.index'))
+    recs = get_recommendations(user['id'], limit=48)
+    return render_template("recommendations.html", recommendations=recs, current_user=user)
 
 
 @main_bp.route("/download/<slug>")

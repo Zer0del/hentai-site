@@ -271,6 +271,9 @@
         // Expose for dynamic content (search results, etc.)
         window.initSmoothImages = initSmoothImages;
 
+        // Extra immediate call for initial render (recs etc may be after some scripts)
+        setTimeout(initSmoothImages, 0);
+
         // Also re-init after any full page load just in case
         window.addEventListener('load', () => {
             // small delay for any late images

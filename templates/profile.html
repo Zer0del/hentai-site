@@ -4,83 +4,116 @@
 
 {% block content %}
 <div class="max-w-screen-2xl mx-auto px-6 py-8">
-    <div class="flex items-center gap-x-3 mb-8">
+    <!-- User Header -->
+    <div class="flex items-center gap-x-4 mb-8">
         {% if user and user.get('avatar') %}
-        <img src="/uploads/avatars/{{ user.avatar }}" class="w-12 h-12 rounded-full object-cover border border-white/10" onerror="this.src='https://picsum.photos/id/1011/48/48'">
+        <img src="/uploads/avatars/{{ user.avatar }}" class="w-16 h-16 rounded-full object-cover border border-white/10" onerror="this.src='https://picsum.photos/id/1011/64/64'">
+        {% else %}
+        <div class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-3xl border border-white/10">👤</div>
         {% endif %}
-        <h1 class="text-3xl font-semibold" style="color: {{ user.get('username_color') or '#e11d48' }}">
-            {{ user.username }}
-            {% if user.get('is_premium') %}
-            <span class="text-xs ml-2 px-2 py-0.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-black rounded-full font-medium">PREMIUM</span>
-            {% endif %}
-        </h1>
-    </div>
-
-    {% if recommendations %}
-    <div class="mb-8">
-        <h2 class="text-xl font-semibold mb-4">Рекомендации для вас</h2>
-        <div class="grid-manga">
-            {% for m in recommendations %}
-            <a href="/manga/{{ m.slug }}" class="block group">
-                <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
-                    <img src="{{ m.cover }}" class="manga-cover w-full transition group-hover:scale-[1.015]" onerror="this.src='https://picsum.photos/id/1011/300/400'">
-                    <div class="px-3 py-3">
-                        <div class="manga-title font-semibold text-[15px] leading-tight">{{ m.title }}</div>
-                    </div>
-                </div>
-            </a>
-            {% endfor %}
+        <div>
+            <h1 class="text-3xl font-semibold" style="color: {{ user.get('username_color') or '#e11d48' }}">
+                {{ user.username }}
+                {% if user.get('is_premium') %}
+                <span class="text-xs ml-2 px-3 py-0.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-black rounded-full font-medium">PREMIUM</span>
+                {% endif %}
+            </h1>
+            <div class="text-white/50 text-sm mt-1">
+                Избранное: <span class="text-white">{{ favorites|length }}</span> • 
+                Оценок: <span class="text-white">{{ my_ratings|length }}</span> • 
+                Прочитано: <span class="text-white">{{ history|length }}</span>
+            </div>
         </div>
     </div>
-    {% endif %}
 
-    <!-- Favorites -->
-    <div class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">Избранное</h2>
+    <!-- Избранное -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-xl font-semibold">Избранное</h2>
+            {% if favorites|length > 12 %}
+            <span class="text-xs text-white/50">Показано 12 из {{ favorites|length }}</span>
+            {% endif %}
+        </div>
         {% if favorites %}
-        <div class="grid-manga">
-            {% for m in favorites %}
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+            {% for m in favorites[:12] %}
             <a href="/manga/{{ m.slug }}" class="block group">
                 <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
                     <img src="{{ m.cover }}" class="manga-cover w-full" onerror="this.src='https://picsum.photos/id/1011/300/400'">
-                    <div class="px-3 py-3">
-                        <div class="font-semibold text-sm group-hover:text-[#e11d48]">{{ m.title }}</div>
-                        {% if m.author %}
-                        <div class="text-[11px] text-white/50 mt-0.5">{{ m.author }}</div>
-                        {% endif %}
+                    <div class="px-2 py-2">
+                        <div class="font-semibold text-sm truncate group-hover:text-[#e11d48]">{{ m.title }}</div>
+                        {% if m.author %}<div class="text-[10px] text-white/50 truncate">{{ m.author }}</div>{% endif %}
                     </div>
                 </div>
             </a>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-white/40">Пока нет избранного. Добавляйте мангу на странице тайтла.</p>
+        <p class="text-white/40 text-sm">Нет избранного. Добавляйте на страницах манги.</p>
         {% endif %}
     </div>
 
-    <!-- History -->
-    <div class="mb-10">
-        <h2 class="text-xl font-semibold mb-4">История чтения</h2>
+    <!-- История чтения (компактно) -->
+    <div class="mb-8">
+        <h2 class="text-xl font-semibold mb-3">История чтения (последние)</h2>
         {% if history %}
-        <div class="space-y-3">
-            {% for h in history %}
-            <a href="/manga/{{ h.slug }}" class="flex items-center gap-4 bg-[#111] rounded-2xl p-3 border border-white/5 hover:border-white/10">
-                <img src="{{ h.cover }}" class="w-14 h-20 object-cover rounded" onerror="this.src='https://picsum.photos/id/1011/56/80'">
-                <div class="flex-1">
-                    <div class="font-medium">{{ h.title }}</div>
-                    {% if h.author %}<div class="text-[11px] text-white/50">{{ h.author }}</div>{% endif %}
-                    <div class="text-xs text-white/50">
-                        {% if h.completed %}Прочитано полностью{% else %}Страница {{ h.last_page }}{% endif %}
-                        • {{ h.last_read_at[:16] if h.last_read_at else '' }}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {% for h in history[:10] %}
+            <a href="/manga/{{ h.slug }}" class="flex gap-3 bg-[#111] rounded-2xl p-2 border border-white/5 hover:border-white/10 transition">
+                <img src="{{ h.cover }}" class="w-12 h-16 object-cover rounded" onerror="this.src='https://picsum.photos/id/1011/48/64'">
+                <div class="flex-1 min-w-0">
+                    <div class="font-medium text-sm truncate">{{ h.title }}</div>
+                    <div class="text-xs text-white/50">{{ h.author or '' }}</div>
+                    <div class="text-xs mt-1">
+                        {% if h.completed %}<span class="text-emerald-400">✓ Прочитано</span>{% else %}Стр. {{ h.last_page }}{% endif %}
                     </div>
                 </div>
-                <div class="text-xs px-2 py-1 bg-white/5 rounded">Читать</div>
             </a>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-white/40">История чтения пуста.</p>
+        <p class="text-white/40 text-sm">История пуста.</p>
         {% endif %}
+    </div>
+
+    <!-- Оценки и предпочтения в ряд -->
+    <div class="grid md:grid-cols-2 gap-8">
+        <!-- Мои оценки -->
+        <div>
+            <h2 class="text-xl font-semibold mb-3">Мои оценки</h2>
+            {% if my_ratings %}
+            <div class="space-y-1 text-sm max-h-80 overflow-auto pr-1">
+                {% for r in my_ratings[:15] %}
+                <a href="/manga/{{ r.slug }}" class="flex justify-between items-center bg-[#111] hover:bg-white/5 px-3 py-2 rounded-xl transition">
+                    <span class="truncate">{{ r.title }}</span>
+                    <span class="text-[#f59e0b] ml-2 flex-shrink-0">{{ r.score }} ★</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-white/40 text-sm">Вы ещё не ставили оценки.</p>
+            {% endif %}
+        </div>
+
+        <!-- Веса тегов -->
+        <div>
+            <h2 class="text-xl font-semibold mb-3">Предпочтения по тегам</h2>
+            {% if tag_weights %}
+            <div class="text-sm bg-[#111] rounded-2xl p-4 max-h-80 overflow-auto">
+                {% for tag, w in tag_weights %}
+                <div class="flex justify-between py-0.5 border-b border-white/5 last:border-0">
+                    <span class="truncate">{{ tag }}</span>
+                    <span class="font-mono ml-2 {{ 'text-emerald-400' if w > 0 else 'text-red-400' if w < 0 else 'text-white/50' }}">
+                        {{ w }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="text-xs text-white/40 mt-1">Положительные — любимые теги (обновляется после оценок и избранного).</p>
+            {% else %}
+            <p class="text-white/40 text-sm">Поставьте оценки или добавьте в избранное.</p>
+            {% endif %}
+        </div>
     </div>
 
     {% if not user.get('is_premium') %}
@@ -127,83 +160,8 @@
     <p class="text-xs text-blue-400 mb-4">У вас права администратора — кнопка «Удалить» будет рядом с каждым комментарием на страницах манг.</p>
     {% endif %}
 
-    <!-- Favorites + Ratings + Weights (redesigned, non-bloated) -->
-    <div>
-        <div class="flex gap-2 border-b border-white/10 mb-4 text-sm">
-            <button onclick="showProfileTab('favs')" id="tab-favs" class="px-4 py-2 border-b-2 border-[#e11d48] font-medium">Избранное ({{ favorites|length }})</button>
-            <button onclick="showProfileTab('ratings')" id="tab-ratings" class="px-4 py-2 text-white/60 hover:text-white">Мои оценки ({{ my_ratings|length }})</button>
-            <button onclick="showProfileTab('weights')" id="tab-weights" class="px-4 py-2 text-white/60 hover:text-white">Веса тегов</button>
-        </div>
-
-        <div id="tab-content-favs">
-            {% if favorites %}
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[520px] overflow-auto pr-2">
-                {% for m in favorites %}
-                <a href="/manga/{{ m.slug }}" class="block group">
-                    <div class="rounded-2xl overflow-hidden border border-white/10 bg-[#111]">
-                        <img src="{{ m.cover }}" class="w-full aspect-[3/4] object-cover group-hover:scale-[1.02] transition" onerror="this.src='https://picsum.photos/id/1011/300/400'">
-                        <div class="p-2 text-xs truncate">{{ m.title }}</div>
-                    </div>
-                </a>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="text-white/40">Избранное пусто.</p>
-            {% endif %}
-        </div>
-
-        <div id="tab-content-ratings" class="hidden">
-            {% if my_ratings %}
-            <div class="max-h-[420px] overflow-auto space-y-1 pr-1">
-                {% for r in my_ratings %}
-                <a href="/manga/{{ r.slug }}" class="flex justify-between items-center bg-[#111] hover:bg-white/10 px-3 py-2 rounded-xl text-sm transition">
-                    <span class="truncate">{{ r.title }}</span>
-                    <span class="text-[#f59e0b] ml-2">{{ r.score }} ★</span>
-                </a>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="text-white/40">Оценок пока нет.</p>
-            {% endif %}
-        </div>
-
-        <div id="tab-content-weights" class="hidden">
-            {% if tag_weights %}
-            <div class="text-sm bg-[#111] rounded-2xl p-4 max-h-80 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-x-8">
-                {% for tag, w in tag_weights %}
-                <div class="flex justify-between py-1 border-b border-white/5">
-                    <span>{{ tag }}</span>
-                    <span class="font-mono {{ 'text-emerald-400' if w > 0 else 'text-red-400' if w < 0 else 'text-white/50' }}">{{ w }}</span>
-                </div>
-                {% endfor %}
-            </div>
-            <p class="text-xs text-white/40 mt-2">Веса обновляются в реальном времени после оценок и избранного.</p>
-            {% else %}
-            <p class="text-white/40">Добавьте оценки или избранное, чтобы увидеть веса.</p>
-            {% endif %}
-        </div>
-    </div>
+    <!-- Premium settings and admin grants remain below if applicable -->
 </div>
-
-<script>
-function showProfileTab(tab) {
-    document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
-    document.getElementById('tab-content-' + tab).classList.remove('hidden');
-    
-    document.querySelectorAll('[id^="tab-"]').forEach(el => {
-        el.classList.remove('border-b-2', 'border-[#e11d48]', 'font-medium');
-        el.classList.add('text-white/60');
-    });
-    const active = document.getElementById('tab-' + tab);
-    active.classList.add('border-b-2', 'border-[#e11d48]', 'font-medium');
-    active.classList.remove('text-white/60');
-}
-// init first tab
-document.addEventListener('DOMContentLoaded', () => {
-    const first = document.getElementById('tab-favs');
-    if (first) first.classList.add('border-b-2', 'border-[#e11d48]', 'font-medium');
-});
-</script>
 {% endblock %}
 
 {% block scripts %}

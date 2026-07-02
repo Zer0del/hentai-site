@@ -617,6 +617,9 @@ def init_db():
     # Performance indexes (safe, IF NOT EXISTS)
     c.execute("CREATE INDEX IF NOT EXISTS idx_mangas_slug ON mangas(slug)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_mangas_created ON mangas(created_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_mangas_title ON mangas(title)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_mangas_author ON mangas(author)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_mangas_rating ON mangas(rating_sum, rating_count)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_user_ratings_user ON user_ratings(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_user_favorites_user ON user_favorites(user_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_user_history_user ON user_history(user_id)")
@@ -674,7 +677,7 @@ def get_manga_by_slug(slug):
     conn.close()
     return row
 
-def get_all_mangas(search=None, tag=None):
+def get_all_mangas(search=None, tag=None, limit=None, offset=0):
     conn = get_db()
     query = "SELECT * FROM mangas"
     params = []
@@ -689,6 +692,9 @@ def get_all_mangas(search=None, tag=None):
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
     query += " ORDER BY created_at DESC"
+    if limit:
+        query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return rows
@@ -698,3 +704,23 @@ def get_all_users():
     users = conn.execute("SELECT id, username FROM users ORDER BY username").fetchall()
     conn.close()
     return users
+
+# Simple cached tags for search UI (avoids full scan every time)
+_tags_cache = {"ts": 0, "tags": []}
+_TAGS_CACHE_TTL = 300  # 5 min
+
+def get_all_tags():
+    import time
+    now = time.time()
+    if now - _tags_cache["ts"] < _TAGS_CACHE_TTL and _tags_cache["tags"]:
+        return _tags_cache["tags"]
+    conn = get_db()
+    rows = conn.execute("SELECT tags FROM mangas").fetchall()
+    conn.close()
+    tag_set = set()
+    for r in rows:
+        for t in (json.loads(r["tags"] or "[]")):
+            tag_set.add(t)
+    _tags_cache["tags"] = sorted(tag_set)
+    _tags_cache["ts"] = now
+    return _tags_cache["tags"]

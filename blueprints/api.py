@@ -695,7 +695,8 @@ def api_search():
     if not q:
         return jsonify([])
 
-    mangas = get_all_mangas()
+    # Use limited fetch for perf (live search doesn't need all)
+    mangas = get_all_mangas(limit=200)
     results = []
     for m in mangas:
         title = (m["title"] or "").lower()

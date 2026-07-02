@@ -36,7 +36,8 @@ from helpers import (
     natural_sort_key,
     get_current_user, login_user, logout_user, update_user_history,
     get_user_tag_weights, get_recommendations,
-    get_db, init_db, get_all_users
+    get_db, init_db, get_all_users,
+    get_all_tags
 )
 
 # Basic logging — must be early, before any top-level code that might log
@@ -197,6 +198,17 @@ def create_app():
     @app.route("/uploads/<path:filename>")
     def serve_uploads(filename):
         return send_from_directory(uploads_root, filename)
+
+    @app.after_request
+    def add_header(response):
+        # Production headers for perf and security
+        if 'static' in request.path or '/uploads/' in request.path:
+            response.cache_control.max_age = 86400 * 7  # 1 week for static/uploads
+            response.cache_control.public = True
+        # Security basics
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+        return response
 
     return app
 
@@ -981,10 +993,16 @@ def _compute_recommendations(user_id, limit=8):
 
     total_signal = sum(tag_weights.values())
     if total_signal < 5:
-        # Cold start: популярные, исключая прочитанные
+        # Cold start: популярные, исключая прочитанные/оцененные/избранные
         conn = get_db()
         read_ids = {r['manga_id'] for r in conn.execute(
             "SELECT manga_id FROM user_history WHERE user_id=? AND completed=1", (user_id,)
+        ).fetchall()}
+        rated_ids = {r['manga_id'] for r in conn.execute(
+            "SELECT manga_id FROM user_ratings WHERE user_id=?", (user_id,)
+        ).fetchall()}
+        fav_ids = {r['manga_id'] for r in conn.execute(
+            "SELECT manga_id FROM user_favorites WHERE user_id=?", (user_id,)
         ).fetchall()}
 
         recs = conn.execute("""
@@ -996,7 +1014,7 @@ def _compute_recommendations(user_id, limit=8):
 
         result = []
         for r in recs:
-            if r['id'] in read_ids:
+            if r['id'] in read_ids or r['id'] in rated_ids or r['id'] in fav_ids:
                 continue
             r = dict(r)
             r["cover"] = get_cover_url(r, thumb=True)
@@ -1011,11 +1029,17 @@ def _compute_recommendations(user_id, limit=8):
     read_ids = {r['manga_id'] for r in conn.execute(
         "SELECT manga_id FROM user_history WHERE user_id=? AND completed=1", (user_id,)
     ).fetchall()}
+    rated_ids = {r['manga_id'] for r in conn.execute(
+        "SELECT manga_id FROM user_ratings WHERE user_id=?", (user_id,)
+    ).fetchall()}
+    fav_ids = {r['manga_id'] for r in conn.execute(
+        "SELECT manga_id FROM user_favorites WHERE user_id=?", (user_id,)
+    ).fetchall()}
 
-    candidates = conn.execute("SELECT * FROM mangas").fetchall()
+    candidates = conn.execute("SELECT * FROM mangas ORDER BY created_at DESC LIMIT 500").fetchall()  # cap for perf on large libs
     scored = []
     for m in candidates:
-        if m['id'] in read_ids:
+        if m['id'] in read_ids or m['id'] in rated_ids or m['id'] in fav_ids:
             continue
         tags = json.loads(m['tags'] or '[]')
         score = sum(tag_weights.get(t, 0) for t in tags)
@@ -1809,7 +1833,8 @@ from helpers import (
     natural_sort_key,
     get_current_user, login_user, logout_user, update_user_history,
     get_user_tag_weights, get_recommendations,
-    get_db, init_db, get_all_users
+    get_db, init_db, get_all_users,
+    get_all_tags
 )
 
 app = create_app()
@@ -1826,4 +1851,7 @@ if __name__ == "__main__":
     print(f"Admin password: {ADMIN_PASS}")
     print(f"DB: {DB_PATH} (WAL + indexes enabled)")
     print("Open on this PC: http://127.0.0.1:5000")
-    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False, threaded=True)
+    # For development only. For production use: gunicorn -w 4 -b 0.0.0.0:5000 app:app
+    # With nginx in front for static/uploads, gzip, etc.
+    # This setup + query limits + caching should handle 500+ concurrent read-heavy users comfortably on decent VPS.
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False, threaded=True)

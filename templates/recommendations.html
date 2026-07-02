@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Ваши рекомендации • FAKKU{% endblock %}
+
+{% block content %}
+<div class="max-w-screen-2xl mx-auto px-6 py-8">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-semibold tracking-tight">Персональные рекомендации</h1>
+            <p class="text-white/50 text-sm">На основе ваших оценок и избранного. Манга, которую вы уже оценили или добавили в избранное, исключена.</p>
+        </div>
+        <a href="/" class="text-sm px-4 py-2 bg-white/5 hover:bg-white/10 rounded-2xl">На главную</a>
+    </div>
+
+    {% if recommendations %}
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
+        {% for m in recommendations %}
+        <a href="/manga/{{ m.slug }}" class="block group">
+            <div class="fakku-card rounded-2xl overflow-hidden border border-white/5 bg-[#111] modern-card">
+                <div class="relative">
+                    <img src="{{ m.cover }}" class="manga-cover w-full transition duration-200 group-hover:scale-[1.015]" onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                    {% if m.rating or m.avg_rating %}
+                    <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-xs text-white/90">
+                        <i class="fa-solid fa-star text-[#f59e0b] text-[10px]"></i>
+                        <span class="font-medium ml-0.5">{{ '%.1f'|format(m.rating or m.avg_rating) }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="px-3 py-2.5">
+                    <div class="font-semibold text-[13.5px] leading-snug text-white group-hover:text-[#e11d48] transition">{{ m.title }}</div>
+                    {% if m.author %}<div class="text-[10px] text-white/50 mt-0.5">{{ m.author }}</div>{% endif %}
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-16">
+        <p class="text-white/40">Пока нет персональных рекомендаций. Поставьте несколько оценок или добавьте в избранное.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

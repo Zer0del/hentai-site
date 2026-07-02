@@ -161,6 +161,19 @@
         <p class="text-white/40 mt-1 text-sm max-w-xs mx-auto">Попробуйте ослабить фильтры или поисковый запрос. Выбирайте меньше тегов для более широкого поиска.</p>
     </div>
     {% endif %}
+
+    <!-- Search pagination -->
+    {% if total_search_pages and total_search_pages > 1 %}
+    <div class="flex justify-center gap-2 mt-6 text-sm">
+        {% if search_page > 1 %}
+        <a href="?q={{ q }}&sort={{ sort }}&min_rating={{ min_rating }}&page={{ search_page - 1 }}{% for t in selected_tags %}&tag={{ t }}{% endfor %}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">← Назад</a>
+        {% endif %}
+        <span class="text-white/50 px-2">Страница {{ search_page }} / {{ total_search_pages }}</span>
+        {% if search_page < total_search_pages %}
+        <a href="?q={{ q }}&sort={{ sort }}&min_rating={{ min_rating }}&page={{ search_page + 1 }}{% for t in selected_tags %}&tag={{ t }}{% endfor %}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">Вперёд →</a>
+        {% endif %}
+    </div>
+    {% endif %}
     </div>
 </div>
 
