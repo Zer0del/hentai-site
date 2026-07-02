@@ -447,6 +447,7 @@ def register():
     password = request.form.get("password") or ""
     if not username or not password:
         return redirect(url_for("main.login"))
+
     conn = get_db()
     try:
         conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))

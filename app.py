@@ -129,6 +129,14 @@ def _get_secret_key():
 
 ADMIN_PASS = os.environ.get("FAKKU_ADMIN_PASS", "admin123")
 
+# IP whitelist for site access during development.
+# Only these IPs can access the site (including login).
+# Set via env: ALLOWED_IPS="213.21.250.124,86.110.23.19,..."
+# localhost included for local dev.
+ALLOWED_IPS = set([ip.strip() for ip in os.environ.get(
+    "ALLOWED_IPS", "127.0.0.1,::1,213.21.250.124,86.110.23.19"
+).split(",") if ip.strip()])
+
 ALLOWED_COVER = {"png", "jpg", "jpeg", "webp", "gif"}
 ALLOWED_PAGE = {"png", "jpg", "jpeg", "webp", "gif"}
 ALLOWED_ZIP = {"zip", "cbz"}
@@ -159,6 +167,21 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(forum_bp)
+
+    # IP whitelist check (dev mode) - block access from non-allowed IPs
+    @app.before_request
+    def restrict_to_whitelisted_ips():
+        if not ALLOWED_IPS:
+            return  # no restriction if empty
+        # Get real client IP (behind nginx proxy)
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            client_ip = forwarded.split(",")[0].strip()
+        else:
+            client_ip = request.remote_addr or ""
+        if client_ip not in ALLOWED_IPS:
+            # Return 403 without details
+            return "Access denied (IP not in whitelist).", 403
 
     # Configure bulk here, after all names are defined
     try:
