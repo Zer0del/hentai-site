@@ -216,6 +216,18 @@ async function submitAdminForm(e) {
     e.preventDefault();
     const form = e.target;
     const status = document.getElementById('admin-status');
+    
+    // Client-side size check to avoid 413 (Request Entity Too Large)
+    let totalSize = 0;
+    const MAX_UPLOAD_MB = 80;
+    for (let [_, value] of new FormData(form).entries()) {
+        if (value instanceof File) totalSize += value.size;
+    }
+    if (totalSize > MAX_UPLOAD_MB * 1024 * 1024) {
+        status.innerHTML = `<span class="text-red-400">Слишком большой запрос (${(totalSize/1024/1024).toFixed(1)} МБ). Увеличь client_max_body_size в nginx до 100M+.</span>`;
+        return;
+    }
+
     status.innerHTML = 'Загружаем...';
     
     const fd = new FormData(form);

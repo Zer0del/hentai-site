@@ -298,6 +298,10 @@ def api_delete_comment():
 
 @api_bp.route("/api/add_manga", methods=["POST"])
 def api_add_manga():
+    """Add manga via admin form (ZIP or multiple images).
+    IMPORTANT for production: set `client_max_body_size 100M;` (or higher) in your nginx server block,
+    otherwise you will get 413 Request Entity Too Large when uploading real archives.
+    """
     shared = _get_shared()
     password = request.form.get("password", "") or request.headers.get("X-Admin-Pass", "")
     if password != shared['ADMIN_PASS']:

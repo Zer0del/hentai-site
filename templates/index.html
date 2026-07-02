@@ -302,6 +302,17 @@ async function submitAddManga(e) {
     const status = document.getElementById('add-status');
     const btn = document.getElementById('submit-btn');
     
+    // Client-side size check BEFORE sending (prevents 413 Request Entity Too Large from Nginx)
+    let totalSize = 0;
+    const MAX_UPLOAD_MB = 80; // Change this to match your nginx `client_max_body_size` (e.g. 100M)
+    for (let [key, value] of new FormData(form).entries()) {
+        if (value instanceof File) totalSize += value.size;
+    }
+    if (totalSize > MAX_UPLOAD_MB * 1024 * 1024) {
+        status.innerHTML = `<span class="text-red-400">Файл(ы) слишком большие (${(totalSize / 1024 / 1024).toFixed(1)} МБ). Лимит ~${MAX_UPLOAD_MB} МБ. Сожмите ZIP или выберите меньше страниц.</span>`;
+        return;
+    }
+
     btn.disabled = true;
     btn.innerText = 'Загрузка...';
     status.innerHTML = 'Обрабатываем файлы...';

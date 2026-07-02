@@ -218,38 +218,10 @@ def create_app():
 # get_db, init_db, etc. are imported above from helpers.
 
 def seed_demo_if_empty():
-    """Create a working demo manga + demo users (works out of the box)."""
+    """Create initial demo users if none exist. Demo manga seeding disabled to prevent placeholder reappearing after deletion."""
     conn = get_db()
 
-    # Seed demo manga if none
-    manga_count = conn.execute("SELECT COUNT(*) as c FROM mangas").fetchone()["c"]
-    if manga_count == 0:
-        slug = "demo-sample-manga"
-        title = "Sample Hentai Manga (Demo)"
-        desc = "Это демонстрационная манга. Замените на свою через панель администратора. Используйте ZIP или отдельные картинки."
-        tags = ["demo", "sample", "hentai", "schoolgirl"]
-        cover = "https://picsum.photos/id/1011/600/800"
-        demo_pages = [
-            "https://picsum.photos/id/1015/800/1100",
-            "https://picsum.photos/id/1005/800/1100",
-            "https://picsum.photos/id/1033/800/1100",
-            "https://picsum.photos/id/106/800/1100",
-            "https://picsum.photos/id/160/800/1100",
-            "https://picsum.photos/id/201/800/1100",
-            "https://picsum.photos/id/251/800/1100",
-            "https://picsum.photos/id/29/800/1100",
-        ]
-        try:
-            conn.execute(
-                "INSERT INTO mangas (slug, title, description, cover, pages, tags) VALUES (?, ?, ?, ?, ?, ?)",
-                (slug, title, desc, cover, json.dumps(demo_pages), json.dumps(tags))
-            )
-            conn.commit()
-            logger.info("Seeded demo manga: %s", slug)
-        except Exception as e:
-            logger.warning("Manga seed error: %s", e)
-
-    # Seed demo users if none
+    # Seed demo users if none (for initial setup / testing)
     user_count = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
     if user_count == 0:
         demo_users = [
@@ -269,6 +241,8 @@ def seed_demo_if_empty():
             pass
         conn.commit()
         logger.info("Seeded demo users: demo_user / demo , fan_lover / 123 , hentai_fan / pass")
+
+    # NOTE: Demo manga seeding removed. If you want placeholder, add manually via admin.
 
     # Seed default forum categories and forums if none exist
     cat_count = conn.execute("SELECT COUNT(*) as c FROM forum_categories").fetchone()["c"]
@@ -1841,10 +1815,10 @@ app = create_app()
 
 # -------------------- Startup --------------------
 init_db()
-seed_demo_if_empty()
+# seed_demo_if_empty()  -- disabled for production (prevents demo placeholder from reappearing)
 if __name__ == "__main__":
     init_db()
-    seed_demo_if_empty()
+    # seed_demo_if_empty()  -- disabled for production
     import os
     print("FAKKU-like Hentai Manga Reader starting (modular split structure)...")
     print(f"PID: {os.getpid()}")
