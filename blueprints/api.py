@@ -302,97 +302,108 @@ def api_add_manga():
     IMPORTANT for production:
     - set `client_max_body_size 2G;` (or higher) in nginx
     - set long timeouts: proxy_read_timeout 600s; etc.
-    - For 200-300+ page archives, processing (especially thumbnails) can take 30-300+ seconds depending on image sizes and server CPU.
+    - For 200-300+ page archives, processing (thumbnails) can take time; use gunicorn --timeout 600
     """
     shared = _get_shared()
-    password = request.form.get("password", "") or request.headers.get("X-Admin-Pass", "")
-    if password != shared['ADMIN_PASS']:
-        return jsonify({"error": "Неверный пароль администратора"}), 403
+    conn = None
+    try:
+        password = request.form.get("password", "") or request.headers.get("X-Admin-Pass", "")
+        if password != shared['ADMIN_PASS']:
+            return jsonify({"error": "Неверный пароль администратора"}), 403
 
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return jsonify({"error": "Требуются права администратора (активируйте админку в профиле)"}), 403
+        # Password match is enough for admin add (bulk and direct uploads).
+        # No longer strictly require is_admin session (simplifies internal bulk).
 
-    title = (request.form.get("title") or "").strip()
-    author = (request.form.get("author") or "").strip()
-    description = (request.form.get("description") or "").strip()
-    tags_raw = (request.form.get("tags") or "").strip()
+        title = (request.form.get("title") or "").strip()
+        author = (request.form.get("author") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        tags_raw = (request.form.get("tags") or "").strip()
 
-    if not title:
-        return jsonify({"error": "Название обязательно"}), 400
+        if not title:
+            return jsonify({"error": "Название обязательно"}), 400
 
-    tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
-    slug = shared['slugify'](title)
+        tags = [t.strip() for t in tags_raw.split(",") if t.strip()]
+        slug = shared['slugify'](title)
 
-    conn = shared['get_db']()
-    existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (slug,)).fetchone()
-    if existing:
-        slug = f"{slug}-{shared['uuid'].uuid4().hex[:6]}"
+        conn = shared['get_db']()
+        existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (slug,)).fetchone()
+        if existing:
+            slug = f"{slug}-{shared['uuid'].uuid4().hex[:6]}"
 
-    manga_dir = shared['get_manga_dir'](slug)
+        manga_dir = shared['get_manga_dir'](slug)
 
-    cover_file = request.files.get("cover")
-    if not cover_file or not cover_file.filename:
-        conn.close()
-        return jsonify({"error": "Нужна обложка (cover)"}), 400
+        cover_file = request.files.get("cover")
+        if not cover_file or not cover_file.filename:
+            conn.close()
+            return jsonify({"error": "Нужна обложка (cover)"}), 400
 
-    cover_name = shared['save_uploaded_file'](cover_file, manga_dir, "cover")
-    if not cover_name:
-        conn.close()
-        return jsonify({"error": "Неверный формат обложки"}), 400
+        cover_name = shared['save_uploaded_file'](cover_file, manga_dir, "cover")
+        if not cover_name:
+            conn.close()
+            return jsonify({"error": "Неверный формат обложки"}), 400
 
-    cover_name = shared['_finalize_cover'](manga_dir, cover_name)
+        cover_name = shared['_finalize_cover'](manga_dir, cover_name)
 
-    page_files = request.files.getlist("pages")
-    pages = []
+        page_files = request.files.getlist("pages")
+        pages = []
 
-    zip_file = request.files.get("zipfile")
-    if zip_file and zip_file.filename:
-        ext = zip_file.filename.rsplit(".", 1)[-1].lower()
-        if ext in shared.get('ALLOWED_ZIP', {"zip", "cbz"}):
-            try:
-                pages = shared['extract_zip_and_normalize'](zip_file, manga_dir, "p")
-            except Exception as e:
+        zip_file = request.files.get("zipfile")
+        if zip_file and zip_file.filename:
+            ext = zip_file.filename.rsplit(".", 1)[-1].lower()
+            if ext in shared.get('ALLOWED_ZIP', {"zip", "cbz"}):
+                try:
+                    pages = shared['extract_zip_and_normalize'](zip_file, manga_dir, "p")
+                except Exception as e:
+                    conn.close()
+                    return jsonify({"error": f"Ошибка распаковки zip: {str(e)}"}), 400
+            else:
                 conn.close()
-                return jsonify({"error": f"Ошибка распаковки zip: {str(e)}"}), 400
+                return jsonify({"error": "Zip должен быть .zip или .cbz"}), 400
+        elif page_files:
+            idx = 1
+            for f in page_files:
+                if not f.filename:
+                    continue
+                saved = shared['save_uploaded_file'](f, manga_dir, f"{idx:03d}")
+                if saved:
+                    pages.append(saved)
+                    full_path = os.path.join(manga_dir, saved)
+                    base = os.path.splitext(saved)[0]
+                    thumb_name = f"{base}-thumb.webp"
+                    shared['_create_thumbnail'](full_path, os.path.join(manga_dir, thumb_name), max_height=240, resample=None)
+                    # Full page WebP re-encode removed for speed on large uploads (280+ pages)
+                    idx += 1
+            pages.sort(key=shared['natural_sort_key'])
         else:
             conn.close()
-            return jsonify({"error": "Zip должен быть .zip или .cbz"}), 400
-    elif page_files:
-        idx = 1
-        for f in page_files:
-            if not f.filename:
-                continue
-            saved = shared['save_uploaded_file'](f, manga_dir, f"{idx:03d}")
-            if saved:
-                pages.append(saved)
-                full_path = os.path.join(manga_dir, saved)
-                base = os.path.splitext(saved)[0]
-                thumb_name = f"{base}-thumb.webp"
-                shared['_create_thumbnail'](full_path, os.path.join(manga_dir, thumb_name), max_height=240, resample=None)
-                # Full page WebP re-encode removed for speed on large uploads (280+ pages)
-                idx += 1
-        pages.sort(key=shared['natural_sort_key'])
-    else:
-        conn.close()
-        return jsonify({"error": "Нужно загрузить страницы (множественный выбор или zip)"}), 400
+            return jsonify({"error": "Нужно загрузить страницы (множественный выбор или zip)"}), 400
 
-    if not pages:
-        conn.close()
-        return jsonify({"error": "Не удалось загрузить ни одной страницы"}), 400
+        if not pages:
+            conn.close()
+            return jsonify({"error": "Не удалось загрузить ни одной страницы"}), 400
 
-    try:
-        conn.execute("""
-            INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-        """, (slug, title, author, description, cover_name, json.dumps(pages), json.dumps(tags)))
-        conn.commit()
-    except Exception as e:
+        try:
+            conn.execute("""
+                INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
+            """, (slug, title, author, description, cover_name, json.dumps(pages), json.dumps(tags)))
+            conn.commit()
+        except Exception as e:
+            conn.close()
+            return jsonify({"error": f"Ошибка сохранения: {str(e)}"}), 500
         conn.close()
-        return jsonify({"error": f"Ошибка сохранения: {str(e)}"}), 500
-    conn.close()
 
-    return jsonify({"ok": True, "slug": slug, "title": title, "pages": len(pages)})
+        return jsonify({"ok": True, "slug": slug, "title": title, "pages": len(pages)})
+    except Exception as outer_e:
+        try:
+            if conn:
+                conn.close()
+        except:
+            pass
+        # Log full error for debugging (check gunicorn / server logs)
+        import traceback
+        print("api/add_manga ERROR:", traceback.format_exc())
+        return jsonify({"error": f"Внутренняя ошибка сервера: {str(outer_e)}"}), 500
 
 # Note: Other admin APIs like edit_manga, delete_manga, bulk APIs etc. can be moved here.
 # For bulk specific, they are also in admin blueprint.
