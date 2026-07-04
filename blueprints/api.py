@@ -299,8 +299,10 @@ def api_delete_comment():
 @api_bp.route("/api/add_manga", methods=["POST"])
 def api_add_manga():
     """Add manga via admin form (ZIP or multiple images).
-    IMPORTANT for production: set `client_max_body_size 100M;` (or higher) in your nginx server block,
-    otherwise you will get 413 Request Entity Too Large when uploading real archives.
+    IMPORTANT for production:
+    - set `client_max_body_size 2G;` (or higher) in nginx
+    - set long timeouts: proxy_read_timeout 600s; etc.
+    - For 200-300+ page archives, processing (especially thumbnails) can take 30-300+ seconds depending on image sizes and server CPU.
     """
     shared = _get_shared()
     password = request.form.get("password", "") or request.headers.get("X-Admin-Pass", "")
@@ -368,16 +370,7 @@ def api_add_manga():
                 base = os.path.splitext(saved)[0]
                 thumb_name = f"{base}-thumb.webp"
                 shared['_create_thumbnail'](full_path, os.path.join(manga_dir, thumb_name), max_height=240, resample=None)
-                if not saved.lower().endswith('.webp'):
-                    webp_name = f"{base}.webp"
-                    webp_path = os.path.join(manga_dir, webp_name)
-                    if shared['_create_thumbnail'](full_path, webp_path, quality=95):
-                        pages[-1] = webp_name
-                        if saved != webp_name and os.path.exists(full_path):
-                            try:
-                                os.remove(full_path)
-                            except:
-                                pass
+                # Full page WebP re-encode removed for speed on large uploads (280+ pages)
                 idx += 1
         pages.sort(key=shared['natural_sort_key'])
     else:

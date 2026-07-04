@@ -709,27 +709,30 @@ def _bulk_import_worker():
             items = list(_bulk_state["items"])  # snapshot reference
             _bulk_stop_requested = False
 
-        import requests
-        sess = requests.Session()
+        # Use Flask's test client for all internal API calls.
+        # This completely avoids network / port / connection problems in production
+        # (gunicorn on different port, unix sockets, nginx proxy, containers, etc.).
+        # The test client executes requests in-process with proper session handling.
+        # Robust access to the Flask app (works from background threads)
+        _the_app = globals().get('app') or __import__(__name__).app
+        client = _the_app.test_client()
 
-        # Login using the same admin demo user as the CLI bulk script.
-        # This ensures get_current_user() inside /api/add_manga sees is_admin=1.
-        # (The browser session is separate; this requests session needs its own login.)
+        # Login using the same admin demo user. This populates the test client's session
+        # so that get_current_user() inside /api/add_manga will see is_admin=1.
         try:
-            login_resp = sess.post(
-                f"{BULK_BASE_URL}/login",
+            login_resp = client.post(
+                "/login",
                 data={"username": "demo_user", "password": "demo"},
-                timeout=10
+                follow_redirects=True
             )
             if login_resp.status_code not in (200, 302) or ("logout" not in (login_resp.text or "").lower() and "выйти" not in (login_resp.text or "").lower()):
                 _append_bulk_log("Warning: could not log in as admin user for bulk import. Make sure demo_user has is_admin=1.")
         except Exception as login_err:
             _append_bulk_log(f"Login warning for bulk: {login_err}")
 
-        # Make sure the requests session user has admin rights (for the is_admin check in /api/add_manga)
-        # This works even if the demo_user didn't have the flag initially (grant_admin promotes the current logged user)
+        # Grant admin rights for the test client's session (ensures is_admin flag).
         try:
-            grant_resp = sess.post(f"{BULK_BASE_URL}/api/grant_admin", timeout=10)
+            grant_resp = client.post("/api/grant_admin")
             if grant_resp.status_code == 200:
                 _append_bulk_log("Bulk worker session now has admin rights.")
         except Exception as grant_err:
@@ -826,11 +829,10 @@ def _bulk_import_worker():
                     "zipfile": (f"{title}.zip", open(zip_path, "rb"), "application/zip"),
                 }
 
-                resp = sess.post(
-                    f"{BULK_BASE_URL}/api/add_manga",
+                resp = client.post(
+                    "/api/add_manga",
                     data=data,
                     files=files,
-                    timeout=300,
                 )
 
                 # close files

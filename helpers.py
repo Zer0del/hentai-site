@@ -167,22 +167,10 @@ def extract_zip_and_normalize(zip_file, dest_dir: str, prefix: str = "page"):
 
             base = os.path.splitext(out_name)[0]
 
-            # Generate small thumbnail
+            # Generate small thumbnail only (full page re-encode removed to speed up large uploads like 200+ pages)
             thumb_name = f"{base}-thumb.webp"
             thumb_path = os.path.join(dest_dir, thumb_name)
             _create_thumbnail(out_path, thumb_path, max_height=240, resample=getattr(Image, 'BILINEAR', None) if Image else None)
-
-            # Re-encode full page as high-quality WebP
-            if not out_name.lower().endswith('.webp'):
-                webp_name = f"{base}.webp"
-                webp_path = os.path.join(dest_dir, webp_name)
-                if _create_thumbnail(out_path, webp_path, quality=95):
-                    pages[-1] = webp_name
-                    if out_name != webp_name and os.path.exists(out_path):
-                        try:
-                            os.remove(out_path)
-                        except:
-                            pass
 
             idx += 1
 

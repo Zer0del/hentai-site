@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hentach{% endblock %}</title>
-    <!-- Tailwind CDN for dev. For prod consider building with CLI to avoid warnings and faster load. --> 
+    <!-- Tailwind CDN for dev only. 
+         In production: remove this and use a built Tailwind CSS file (or PostCSS) to eliminate the console warning and improve load speed.
+         See: https://tailwindcss.com/docs/installation
+    --> 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="stylesheet" href="/static/css/app.css">
