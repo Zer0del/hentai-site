@@ -31,7 +31,7 @@
             {% if favorites %}
             <div class="grid grid-cols-3 gap-3">
                 {% for m in favorites[:9] %}
-                <a href="/manga/{{ m.slug }}" class="block">
+                <a href="/manga/{{ m.id }}" class="block">
                     <img src="{{ m.cover }}" class="showcase-img rounded-xl w-full aspect-[3/4] object-cover border border-white/10" onerror="this.src='https://picsum.photos/id/1011/200/267'">
                     <div class="text-xs mt-1 truncate">{{ m.title }}</div>
                 </a>
@@ -48,7 +48,7 @@
             {% if my_ratings %}
             <div class="space-y-2 text-sm">
                 {% for r in my_ratings %}
-                <a href="/manga/{{ r.slug }}" class="flex justify-between bg-[#111] hover:bg-white/5 px-3 py-2 rounded-xl">
+                <a href="/manga/{{ r.id }}" class="flex justify-between bg-[#111] hover:bg-white/5 px-3 py-2 rounded-xl">
                     <span class="truncate">{{ r.title }}</span>
                     <span class="text-amber-400 ml-2">{{ r.score }} ★</span>
                 </a>

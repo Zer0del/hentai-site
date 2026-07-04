@@ -70,6 +70,10 @@
                 </div>
             </form>
             <div id="mass-status" class="mt-2 text-sm text-white/70"></div>
+            <div id="mass-progress-container" class="hidden mt-2 w-full bg-white/10 rounded h-3 overflow-hidden">
+                <div id="mass-progress-bar" class="h-full bg-[#e11d48] transition-all" style="width: 0%"></div>
+            </div>
+            <div id="mass-progress-text" class="text-xs text-white/50 mt-1"></div>
         </div>
 
         <div class="mt-6 text-xs text-white/40 px-2">
@@ -132,7 +136,7 @@
                 {% endif %}
 
                 <div class="mt-2 flex gap-2">
-                    <a href="/manga/{{ m.slug }}" 
+                    <a href="/manga/{{ m.id }}" 
                        class="text-xs px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 flex-1 text-center">Открыть</a>
                     
                     <button onclick="adminEditManga('{{ m.slug }}')"
@@ -242,7 +246,7 @@ async function submitAdminForm(e) {
             const slug = j.slug || (j.slugs && j.slugs[0]);
             if (slug) {
                 setTimeout(() => {
-                    window.location = '/manga/' + slug;
+                    window.location = '/manga/' + (slug || id);
                 }, 650);
             } else if (j.added > 1) {
                 status.innerHTML = `<span class="text-emerald-400 font-medium">Добавлено ${j.added} тайтлов.</span>`;
@@ -255,6 +259,8 @@ async function submitAdminForm(e) {
     }
 }
 
+let massPollInterval = null;
+
 async function doMassImport(e) {
     e.preventDefault();
     const status = document.getElementById('mass-status');
@@ -264,19 +270,46 @@ async function doMassImport(e) {
         return;
     }
     status.innerHTML = 'Импортируем...';
+    const progContainer = document.getElementById('mass-progress-container');
+    const progBar = document.getElementById('mass-progress-bar');
+    const progText = document.getElementById('mass-progress-text');
+    progContainer.classList.remove('hidden');
+    progBar.style.width = '0%';
+    progText.textContent = '0 / ?';
     try {
         const fd = new FormData();
         fd.append('root', root);
         const r = await fetch('/api/mass_import', { method: 'POST', body: fd });
         const j = await r.json();
         if (r.ok && j.ok) {
-            status.innerHTML = `<span class="text-emerald-400">Добавлено: ${j.added}. Обновите страницу.</span>`;
-            setTimeout(() => location.reload(), 1500);
+            status.innerHTML = `<span class="text-emerald-400">${j.message || 'Импорт запущен в фоне...'}</span>`;
+            // start polling
+            if (massPollInterval) clearInterval(massPollInterval);
+            massPollInterval = setInterval(async () => {
+                try {
+                    const sr = await fetch('/api/mass_import/status');
+                    const sj = await sr.json();
+                    if (sj.total > 0) {
+                        const pct = Math.min(100, Math.floor((sj.done / sj.total) * 100));
+                        progBar.style.width = pct + '%';
+                        progText.textContent = `${sj.done} / ${sj.total} - ${sj.current || ''}`;
+                    } else {
+                        progText.textContent = sj.current || 'Обработка...';
+                    }
+                    if (!sj.running) {
+                        clearInterval(massPollInterval);
+                        status.innerHTML = `<span class="text-emerald-400">Готово! Добавлено: ${sj.added}. Обновите страницу.</span>`;
+                        setTimeout(() => location.reload(), 2000);
+                    }
+                } catch(e) {}
+            }, 500);
         } else {
             status.innerHTML = `<span class="text-red-400">${j.error || 'Ошибка'}</span>`;
+            progContainer.classList.add('hidden');
         }
     } catch (err) {
         status.innerHTML = `<span class="text-red-400">Ошибка: ${err.message}</span>`;
+        progContainer.classList.add('hidden');
     }
 }
 
@@ -348,7 +381,7 @@ async function adminEditManga(slug) {
     document.getElementById('edit-slug-input').value = slug;
 
     try {
-        const res = await fetch('/api/manga/' + slug);
+        const res = await fetch('/api/manga/' + (slug || id));
         const data = await res.json();
 
         document.getElementById('edit-title').value = data.title || '';

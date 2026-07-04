@@ -328,125 +328,135 @@ def api_mass_import():
     root_str = request.form.get("root") or ""
     if not root_str:
         return jsonify({"error": "Укажите корневую папку"}), 400
-
     root = Path(root_str)
     if not root.exists() or not root.is_dir():
-        return jsonify({"error": "Папка не найдена или недоступна"}), 400
+        return jsonify({"error": "Папка не найдена"}), 400
+    mass_import_state["running"] = True
+    mass_import_state["total"] = 0
+    mass_import_state["done"] = 0
+    mass_import_state["added"] = 0
+    mass_import_state["current"] = "Начинаем..."
+    mass_import_state["error"] = None
+    import threading
+    t = threading.Thread(target=_process_mass_import, args=(root_str,), daemon=True)
+    t.start()
+    return jsonify({"ok": True, "message": "Import started in background"})
 
-    slugify = shared.get('slugify')
-    get_manga_dir = shared.get('get_manga_dir')
-    extract_zip_and_normalize = shared.get('extract_zip_and_normalize')
-    save_uploaded_file = shared.get('save_uploaded_file')
-    _finalize_cover = shared.get('_finalize_cover')
-    get_db = shared['get_db']
+@admin_bp.route("/api/mass_import/status")
+def api_mass_import_status():
+    return jsonify(mass_import_state)
 
-    if not all([slugify, get_manga_dir, extract_zip_and_normalize]):
-        return jsonify({"error": "Не все функции доступны для импорта"}), 500
 
-    added = 0
-    conn = get_db()
+mass_import_state = {
+    "running": False,
+    "total": 0,
+    "done": 0,
+    "current": "",
+    "added": 0,
+    "error": None
+}
+
+def _process_mass_import(root_str):
+    global mass_import_state
+    mass_import_state["running"] = True
+    mass_import_state["error"] = None
+    mass_import_state["added"] = 0
+    mass_import_state["done"] = 0
+    mass_import_state["current"] = ""
     try:
+        root = Path(root_str)
+        if not root.exists() or not root.is_dir():
+            print("Mass import: invalid root")
+            return
+        # count total items for progress
+        total = 0
         for author_dir in sorted(root.iterdir()):
-            if not author_dir.is_dir():
-                continue
-            author = author_dir.name
+            if not author_dir.is_dir(): continue
             for item in sorted(author_dir.iterdir()):
-                if item.is_dir():
-                    title = item.name
-                    exts = {'.webp', '.jpg', '.jpeg', '.png', '.gif'}
-                    images = sorted(
-                        [f for f in item.iterdir() if f.is_file() and f.suffix.lower() in exts],
-                        key=lambda f: f.name
-                    )
-                    if not images:
-                        continue
-                    title = item.name
-                    manga_slug = slugify(title)
-                    existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (manga_slug,)).fetchone()
-                    if existing:
-                        manga_slug = f"{manga_slug}-{uuid.uuid4().hex[:6]}"
-                    manga_dir = get_manga_dir(manga_slug)
-                    pages = []
-                    for i, imgf in enumerate(images, 1):
-                        ext = imgf.suffix.lower()
-                        new_name = f"{i:03d}{ext}"
-                        dst = os.path.join(manga_dir, new_name)
-                        shutil.copy2(str(imgf), dst)
-                        pages.append(new_name)
-                    cover_name = pages[0]
-                    # duplicate first page as cover so finalize doesn't delete the page file
-                    cover_src = os.path.join(manga_dir, cover_name)
-                    temp_cover = "cover" + os.path.splitext(cover_name)[1]
-                    shutil.copy2(cover_src, os.path.join(manga_dir, temp_cover))
-                    cover_name = temp_cover
-                    # create thumbs like normal add
-                    if shared.get('_create_thumbnail'):
-                        for p in pages:
-                            full = os.path.join(manga_dir, p)
-                            base = os.path.splitext(p)[0]
-                            thumb_name = f"{base}-thumb.webp"
-                            try:
-                                shared['_create_thumbnail'](full, os.path.join(manga_dir, thumb_name), max_height=240)
-                            except:
-                                pass
-                    if _finalize_cover:
-                        try:
-                            cfinal = _finalize_cover(manga_dir, cover_name)
-                            if cfinal:
-                                cover_name = cfinal
-                        except:
-                            pass
+                if (item.is_dir() or 
+                    (item.is_file() and item.suffix.lower() in {'.zip', '.cbz'})):
+                    total += 1
+        mass_import_state["total"] = total
+        mass_import_state["done"] = 0
+        from app import slugify as _slugify, get_manga_dir as _get_manga_dir, get_db as _get_db
+        from helpers import extract_zip_and_normalize as _extract, _finalize_cover as _final, _create_thumbnail as _thumb
+        conn = _get_db()
+        added = 0
+        try:
+            for author_dir in sorted(root.iterdir()):
+                if not author_dir.is_dir(): continue
+                author = author_dir.name
+                for item in sorted(author_dir.iterdir()):
                     try:
-                        conn.execute("""
-                            INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-                        """, (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
-                        conn.commit()
-                        added += 1
-                    except Exception as e:
-                        pass
-                elif item.is_file() and item.suffix.lower() in {'.zip', '.cbz'}:
-                    title = item.stem
-                    manga_slug = slugify(title)
-                    existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (manga_slug,)).fetchone()
-                    if existing:
-                        manga_slug = f"{manga_slug}-{uuid.uuid4().hex[:6]}"
-                    manga_dir = get_manga_dir(manga_slug)
-                    try:
-                        class FakeFile:
-                            def __init__(self, path):
-                                self.filename = item.name
-                                self._path = path
-                            def save(self, dst):
-                                shutil.copy2(self._path, dst)
-                        fake = FakeFile(str(item))
-                        pages = extract_zip_and_normalize(fake, manga_dir, "p")
-                        if not pages:
-                            continue
-                        cover_name = pages[0]
-                        # duplicate to prevent finalize deleting the page
-                        cover_src = os.path.join(manga_dir, cover_name)
-                        temp_cover = "cover" + os.path.splitext(cover_name)[1]
-                        shutil.copy2(cover_src, os.path.join(manga_dir, temp_cover))
-                        cover_name = temp_cover
-                        if _finalize_cover:
-                            try:
-                                cfinal = _finalize_cover(manga_dir, cover_name)
-                                if cfinal:
-                                    cover_name = cfinal
-                            except:
-                                pass
-                        conn.execute("""
-                            INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-                        """, (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
-                        conn.commit()
-                        added += 1
-                    except Exception as e:
-                        pass
+                        if item.is_dir():
+                            title = item.name
+                            exts = {'.webp', '.jpg', '.jpeg', '.png', '.gif'}
+                            images = sorted([f for f in item.iterdir() if f.is_file() and f.suffix.lower() in exts], key=lambda f: f.name)
+                            if not images: continue
+                            pages = []
+                            manga_slug = _slugify(title)
+                            ex = conn.execute("SELECT id FROM mangas WHERE slug=?", (manga_slug,)).fetchone()
+                            if ex: manga_slug = f"{manga_slug}-{uuid.uuid4().hex[:6]}"
+                            manga_dir = _get_manga_dir(manga_slug)
+                            for i, imgf in enumerate(images, 1):
+                                new_name = f"{i:03d}{imgf.suffix.lower()}"
+                                shutil.copy2(str(imgf), os.path.join(manga_dir, new_name))
+                                pages.append(new_name)
+                            cover_name = pages[0]
+                            cover_src = os.path.join(manga_dir, cover_name)
+                            temp_cover = "cover" + os.path.splitext(cover_name)[1]
+                            shutil.copy2(cover_src, os.path.join(manga_dir, temp_cover))
+                            cover_name = temp_cover
+                            if _thumb:
+                                for p in pages:
+                                    _thumb(os.path.join(manga_dir, p), os.path.join(manga_dir, f"{os.path.splitext(p)[0]}-thumb.webp"), max_height=240)
+                            if _final:
+                                try:
+                                    c = _final(manga_dir, cover_name)
+                                    if c: cover_name = c
+                                except: pass
+                            conn.execute("INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count) VALUES (?,?,?,?,?,?,?,0,0)", (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
+                            conn.commit()
+                            added += 1
+                            mass_import_state["added"] = added
+                        elif item.is_file() and item.suffix.lower() in {'.zip','.cbz'}:
+                            title = item.stem
+                            manga_slug = _slugify(title)
+                            ex = conn.execute("SELECT id FROM mangas WHERE slug=?", (manga_slug,)).fetchone()
+                            if ex: manga_slug = f"{manga_slug}-{uuid.uuid4().hex[:6]}"
+                            manga_dir = _get_manga_dir(manga_slug)
+                            class F:
+                                def __init__(self,p): self.filename=item.name; self._path=p
+                                def save(self,d): shutil.copy2(self._path, d)
+                            pages = _extract(F(str(item)), manga_dir, "p")
+                            if not pages: continue
+                            cover_name = pages[0]
+                            cover_src = os.path.join(manga_dir, cover_name)
+                            temp_cover = "cover" + os.path.splitext(cover_name)[1]
+                            shutil.copy2(cover_src, os.path.join(manga_dir, temp_cover))
+                            cover_name = temp_cover
+                            if _thumb:
+                                for p in pages:
+                                    _thumb(os.path.join(manga_dir, p), os.path.join(manga_dir, f"{os.path.splitext(p)[0]}-thumb.webp"), max_height=240)
+                            if _final:
+                                try:
+                                    c = _final(manga_dir, cover_name)
+                                    if c: cover_name = c
+                                except: pass
+                            conn.execute("INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count) VALUES (?,?,?,?,?,?,?,0,0)", (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
+                            conn.commit()
+                            added += 1
+                            mass_import_state["added"] = added
+                    except Exception as e: print("mass item err", e)
+                    mass_import_state["done"] = mass_import_state.get("done", 0) + 1
+                    mass_import_state["current"] = getattr(locals().get('item'), 'name', str(locals().get('item', '')))
+            print("Mass import bg done, added", added)
+        finally:
+            conn.close()
+    except Exception as e: 
+        print("mass bg fatal", e)
+        mass_import_state["error"] = str(e)
     finally:
-        conn.close()
-
-    return jsonify({"ok": True, "added": added})
+        mass_import_state["running"] = False
 
 print("admin blueprint loaded")

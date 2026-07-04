@@ -39,6 +39,26 @@ from flask import (
     Flask, render_template, request, jsonify, redirect, url_for,
     send_from_directory, send_file, abort, session, g
 )
+try:
+    from flask_caching import Cache
+    HAS_CACHE = True
+except ImportError:
+    Cache = None
+    HAS_CACHE = False
+
+try:
+    from flask_admin import Admin
+    HAS_ADMIN = True
+except ImportError:
+    Admin = None
+    HAS_ADMIN = False
+
+try:
+    from flask_compress import Compress
+    HAS_COMPRESS = True
+except ImportError:
+    Compress = None
+    HAS_COMPRESS = False
 
 import helpers as h
 
@@ -171,6 +191,11 @@ def create_app():
     app.secret_key = _get_secret_key()
     app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2GB max upload - remove any size limits for large manga archives with many pages
 
+    if HAS_CACHE:
+        cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
+    if HAS_COMPRESS:
+        Compress(app)
+
     # Register modular blueprints (routes split out of this file)
     from blueprints.main import main_bp
     from blueprints.admin import admin_bp
@@ -181,6 +206,10 @@ def create_app():
     app.register_blueprint(admin_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(forum_bp)
+
+    if HAS_ADMIN:
+        admin = Admin(app, name='Hentach Admin', template_mode='bootstrap3')
+        # Note: For full Flask-Admin, define ModelView for DB tables. Current custom admin remains for mass import etc.
 
     # IP whitelist check (dev mode) - block access from non-allowed IPs
     @app.before_request
@@ -215,7 +244,14 @@ def create_app():
     uploads_root = os.path.join(BASE_DIR, "uploads")
     @app.route("/uploads/<path:filename>")
     def serve_uploads(filename):
-        return send_from_directory(uploads_root, filename)
+        response = send_from_directory(uploads_root, filename)
+        # Strong cache for images to prevent re-downloads on back/forward and reloads (like nhentai)
+        if filename.lower().endswith(('.webp', '.jpg', '.jpeg', '.png', '.gif')):
+            response.headers['Cache-Control'] = 'public, max-age=2592000, immutable'
+        else:
+            response.cache_control.max_age = 86400 * 30
+            response.cache_control.public = True
+        return response
 
     @app.after_request
     def add_header(response):

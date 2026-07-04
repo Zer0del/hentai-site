@@ -71,7 +71,7 @@
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             {% set shown = history if show_full_history else history[:12] %}
             {% for h in shown %}
-            <a href="/read/{{ h.slug }}{% if not h.completed %}?page={{ h.last_page or 1 }}{% endif %}" class="group block fakku-card rounded-2xl overflow-hidden border border-white/5 hover:border-white/15">
+            <a href="/manga/{{ h.id }}/{{ h.last_page or 1 }}" class="group block fakku-card rounded-2xl overflow-hidden border border-white/5 hover:border-white/15">
                 <div class="relative">
                     <img src="{{ h.cover }}" class="w-full aspect-[3/4] object-cover" onerror="this.src='https://picsum.photos/id/1011/300/400'">
                     {% if not h.completed %}
@@ -114,7 +114,7 @@
         {% if my_ratings %}
         <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
             {% for r in my_ratings[:12] %}
-            <a href="/manga/{{ r.slug }}" class="flex items-center gap-2 bg-[#111] hover:bg-white/5 border border-white/5 rounded-2xl p-1.5 pr-2.5 transition group">
+            <a href="/manga/{{ r.id }}" class="flex items-center gap-2 bg-[#111] hover:bg-white/5 border border-white/5 rounded-2xl p-1.5 pr-2.5 transition group">
                 <img src="{{ r.cover or 'https://picsum.photos/id/1011/60/80' }}" class="w-9 h-12 object-cover rounded-xl" onerror="this.src='https://picsum.photos/id/1011/60/80'">
                 <div class="min-w-0 flex-1">
                     <div class="text-xs font-medium truncate">{{ r.title }}</div>

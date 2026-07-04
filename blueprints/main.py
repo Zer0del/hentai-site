@@ -297,6 +297,19 @@ def search_page():
     paged_results = results[start : start + per_page]
     total_search_pages = (len(results) + per_page - 1) // per_page if results else 1
 
+    if request.args.get('json') == '1':
+        return jsonify({
+            "results": paged_results,
+            "q": q,
+            "sort": sort,
+            "min_rating": min_rating,
+            "unread_only": unread_only,
+            "selected_tags": selected_tags,
+            "total_results": len(results),
+            "current_page": search_page,
+            "total_pages": total_search_pages,
+        })
+
     partial = bool(request.args.get('partial'))
 
     return render_template(
@@ -317,14 +330,25 @@ def search_page():
 @main_bp.route("/manga/<slug>")
 def manga_detail(slug):
     shared = _get_shared()
-    get_manga_by_slug = shared['get_manga_by_slug']
     get_current_user = shared['get_current_user']
     get_db = shared['get_db']
     get_cover_url = shared['get_cover_url']
     get_page_urls = shared['get_page_urls']
     compute_rating = shared['compute_rating']
 
-    row = get_manga_by_slug(slug)
+    # support numeric id or slug
+    conn = get_db()
+    row = None
+    try:
+        try:
+            mid = int(slug)
+            row = conn.execute("SELECT * FROM mangas WHERE id = ?", (mid,)).fetchone()
+        except:
+            pass
+        if not row:
+            row = conn.execute("SELECT * FROM mangas WHERE slug = ?", (slug,)).fetchone()
+    finally:
+        conn.close()
     if not row:
         abort(404)
 
@@ -357,8 +381,6 @@ def manga_detail(slug):
     """, (row['id'],)).fetchall()
     conn.close()
 
-    show_all = bool(request.args.get('show_all'))
-    preview_pages = page_images if show_all else page_images[:30]
     manga = {
         "id": row["id"],
         "slug": row["slug"],
@@ -370,29 +392,51 @@ def manga_detail(slug):
         "rating": avg,
         "rating_count": cnt,
         "pages_count": len(pages),
-        "pages": preview_pages,
-        "show_all": show_all,
-        "total_pages": len(pages),
+        "pages": page_images,
         "my_rating": my_rating,
         "is_favorite": is_favorite,
         "is_read": is_read,
     }
     return render_template("detail.html", manga=manga, current_user=user, comments=comments)
 
+@main_bp.route("/manga/<int:manga_id>/<int:page>")
+@main_bp.route("/manga/<slug>/<int:page>")
 @main_bp.route("/read/<slug>")
-def reader(slug):
+def reader(manga_id=None, slug=None, page=1):
     shared = _get_shared()
-    get_manga_by_slug = shared['get_manga_by_slug']
     get_current_user = shared['get_current_user']
     get_page_urls = shared['get_page_urls']
+    get_db = shared['get_db']
 
-    row = get_manga_by_slug(slug)
+    # query by id (numeric) or slug
+    conn = get_db()
+    row = None
+    try:
+        if manga_id is not None:
+            row = conn.execute("SELECT * FROM mangas WHERE id = ?", (manga_id,)).fetchone()
+        if not row and slug:
+            try:
+                mid = int(slug)
+                row = conn.execute("SELECT * FROM mangas WHERE id = ?", (mid,)).fetchone()
+            except:
+                pass
+            if not row:
+                row = conn.execute("SELECT * FROM mangas WHERE slug = ?", (slug,)).fetchone()
+    finally:
+        conn.close()
     if not row:
         abort(404)
+
+    # redirect old /read to new /manga/id/page for clean URLs
+    if request.path.startswith('/read/'):
+        qpage = request.args.get('page', type=int) or page
+        return redirect(f"/manga/{row['id']}/{qpage}")
 
     pages = json.loads(row["pages"] or "[]")
     page_images = get_page_urls(row["slug"], pages)
     page_thumbs = get_page_urls(row["slug"], pages, thumb=True)
+
+    start_page = request.args.get('page', type=int) or page or 1
 
     manga = {
         "id": row["id"],
@@ -401,6 +445,7 @@ def reader(slug):
         "pages_count": len(pages),
         "pages": page_images,
         "pages_thumb": page_thumbs,
+        "start_page": start_page,
     }
     user = get_current_user()
     return render_template("reader.html", manga=manga, current_user=user)

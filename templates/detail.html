@@ -30,7 +30,7 @@
 
             <!-- Actions row (soft, muted redesign) -->
             <div class="flex flex-wrap items-center gap-2.5 mb-6">
-                <a href="/read/{{ manga.slug }}" 
+                <a href="/manga/{{ manga.id }}/1" 
                    class="inline-flex items-center gap-x-2.5 px-5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-sm font-semibold transition active:scale-[0.985]">
                     <i class="fa-solid fa-book-open"></i>
                     <span>Читать мангу</span>
@@ -132,15 +132,18 @@
     </div>
 
     <!-- Pages previews: limited to 30 to reduce server load, with fade + show all button -->
+    <style>
+        .preview-hidden { display: none; }
+    </style>
     {% if manga.pages %}
     <div class="mt-20">
         <div class="uppercase text-xs tracking-widest font-semibold text-white/50 mb-2">Страницы (кликни, чтобы открыть)</div>
         <div id="pages-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
             {% for p in manga.pages %}
             {% set idx = loop.index %}
-            <a href="/read/{{ manga.slug }}?page={{ idx }}" class="group block">
+            <a href="/manga/{{ manga.id }}/{{ idx }}" class="group block preview-item {% if loop.index > 30 %}preview-hidden{% endif %}">
                 <div class="relative rounded-md overflow-hidden border border-white/10 group-hover:border-[#e11d48] transition-all">
-                    <img data-src="{{ p }}" 
+                    <img {% if loop.index <= 30 %}src="{{ p }}"{% else %}data-src="{{ p }}"{% endif %} 
                          class="w-full aspect-[3/4] object-cover bg-zinc-900"
                          loading="lazy"
                          onerror="this.src='https://picsum.photos/id/1011/120/160'">
@@ -151,28 +154,33 @@
             </a>
             {% endfor %}
         </div>
-        {% if not manga.show_all and manga.total_pages > 30 %}
+        {% if manga.pages|length > 30 %}
         <div id="pages-more" class="relative -mt-8 h-16 bg-gradient-to-t from-black/95 via-black/70 to-transparent flex items-end justify-center pb-1">
-            <a href="?show_all=1" 
-               class="px-4 py-1 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition">
-                Показать всё ({{ manga.total_pages }})
-            </a>
+            <button onclick="showAllPreviews()" 
+                    class="px-4 py-1 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition">
+                Показать всё ({{ manga.pages|length }})
+            </button>
         </div>
         {% endif %}
     </div>
     {% endif %}
 
 <script>
-function loadPreviewImages() {
-  const imgs = document.querySelectorAll('#pages-grid img[data-src]');
-  imgs.forEach(img => {
-    if (img.dataset.src && !img.src) {
+function showAllPreviews() {
+  const grid = document.getElementById('pages-grid');
+  if (!grid) return;
+  const hidden = grid.querySelectorAll('.preview-hidden');
+  hidden.forEach(item => {
+    const img = item.querySelector('img[data-src]');
+    if (img && img.dataset.src) {
       img.src = img.dataset.src;
+      delete img.dataset.src;
     }
+    item.classList.remove('preview-hidden');
   });
+  const more = document.getElementById('pages-more');
+  if (more) more.style.display = 'none';
 }
-
-document.addEventListener('DOMContentLoaded', loadPreviewImages);
 </script>
 
     <div class="mt-8 pt-6 border-t border-white/10 text-xs text-white/50">
@@ -387,7 +395,7 @@ function updateMyRatingBadge(score) {
 // Keyboard shortcut for read
 document.addEventListener('keydown', function(e) {
     if (e.key.toLowerCase() === 'r' && document.activeElement.tagName === "BODY") {
-        window.location = '/read/' + MANGA_SLUG;
+        window.location = '/manga/' + (MANGA_ID || MANGA_SLUG) + '/1';
     }
 });
 
@@ -426,7 +434,7 @@ async function loadEditData() {
     if (status) status.innerHTML = 'Загрузка...';
 
     try {
-        const res = await fetch('/api/manga/' + MANGA_SLUG);
+        const res = await fetch('/api/manga/' + (MANGA_ID || MANGA_SLUG));
         const data = await res.json();
 
         const titleEl = document.getElementById('edit-title');

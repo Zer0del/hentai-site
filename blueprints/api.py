@@ -50,6 +50,19 @@ def api_mangas():
 
 @api_bp.route("/api/manga/<slug>")
 def api_manga(slug):
+    # support numeric id passed as slug str
+    if slug and slug.isdigit():
+        shared = _get_shared()
+        get_db = shared['get_db']
+        conn = get_db()
+        try:
+            row = conn.execute("SELECT slug FROM mangas WHERE id = ?", (int(slug),)).fetchone()
+            if row:
+                slug = row['slug']
+        finally:
+            conn.close()
+    if not slug:
+        return jsonify({"error": "not found"}), 404
     shared = _get_shared()
     row = shared['get_manga_by_slug'](slug)
     if not row:
@@ -367,6 +380,7 @@ def api_add_manga():
             resp = {"ok": True, "added": len(added), "slugs": added}
             if len(added) == 1:
                 resp["slug"] = added[0]
+                # also id? but since after insert, but for simplicity use slug
             return jsonify(resp)
 
         existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (slug,)).fetchone()

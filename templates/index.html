@@ -15,7 +15,7 @@
         </div>
         <div class="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-white/20 -mx-1 px-1">
             {% for m in recommendations %}
-            <a href="/manga/{{ m.slug }}" class="block group w-40 sm:w-44 flex-shrink-0 snap-start">
+            <a href="/manga/{{ m.id }}" class="block group w-40 sm:w-44 flex-shrink-0 snap-start">
                 <div class="rounded-2xl overflow-hidden border border-white/10 bg-[#111] shadow-lg modern-card group-hover:shadow-xl group-hover:-translate-y-[1px]">
                     <div class="relative">
                         <img src="{{ m.cover }}" class="manga-cover w-full aspect-[3/4] object-cover transition duration-200 group-hover:scale-[1.02]" loading="lazy" onerror="this.src='https://picsum.photos/id/1011/300/400'">
@@ -54,7 +54,7 @@
         {% if latest_mangas %}
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
             {% for m in latest_mangas %}
-            <a href="/manga/{{ m.slug }}" class="block group">
+            <a href="/manga/{{ m.id }}" class="block group">
                 <div class="fakku-card rounded-2xl overflow-hidden border border-white/5 bg-[#111] transition-all duration-200 group-hover:border-white/20 group-hover:shadow-xl">
                     <div class="relative">
                         <img src="{{ m.cover }}" 
@@ -311,7 +311,7 @@ async function submitAddManga(e) {
         if (resp.ok && data.ok) {
             status.innerHTML = `<span class="text-emerald-400">Готово! Перенаправляем...</span>`;
             setTimeout(() => {
-                window.location.href = '/manga/' + data.slug;
+                window.location.href = '/manga/' + data.id;
             }, 700);
         } else {
             status.innerHTML = `<span class="text-red-400">${data.error || 'Ошибка'}</span>`;

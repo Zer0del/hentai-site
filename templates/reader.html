@@ -200,7 +200,7 @@
     <!-- Top toolbar -->
     <div class="reader-toolbar px-4 h-[56px] flex items-center justify-between z-40 border-b border-white/10 shrink-0">
         <div class="flex items-center gap-x-4">
-            <a href="/manga/{{ manga.slug }}" class="flex items-center text-white/70 hover:text-white px-3 py-1.5 gap-x-2 rounded-lg hover:bg-white/10 text-sm">
+            <a href="/manga/{{ manga.id }}" onclick="if (history.length > 1) { event.preventDefault(); history.back(); } return false;" class="flex items-center text-white/70 hover:text-white px-3 py-1.5 gap-x-2 rounded-lg hover:bg-white/10 text-sm">
                 <i class="fa-solid fa-arrow-left"></i>
                 <span class="hidden sm:inline">Назад</span>
             </a>
@@ -246,7 +246,7 @@
                 <button onclick="resetZoom()" class="pl-2 text-[11px] opacity-70 hover:opacity-100">RESET</button>
             </div>
 
-            <button onclick="window.location.href='/manga/{{ manga.slug }}'" 
+            <button onclick="if (history.length > 1) { history.back(); } else { window.location.href='/manga/{{ manga.id }}'; }" 
                     class="px-3 py-1.5 hover:bg-white/10 rounded-xl text-sm flex items-center gap-x-1 border border-white/10">
                 <i class="fa-solid fa-times"></i>
             </button>
@@ -272,10 +272,10 @@
             <div id="progress-bar" class="h-full bg-[#e11d48] transition-all" style="width: 0%"></div>
         </div>
 
-        <!-- Thumbnails -->
-        <div class="px-4 py-3 overflow-x-auto thumbnails-strip flex gap-2" id="thumbnails">
+        <!-- Thumbnails strip temporarily disabled to reduce repeated image loads when navigating within one manga -->
+        <!-- <div class="px-4 py-3 overflow-x-auto thumbnails-strip flex gap-2" id="thumbnails">
             <!-- Populated by JS -->
-        </div>
+        </div> -->
     </div>
 </div>
 {% endblock %}
@@ -283,6 +283,7 @@
 {% block scripts %}
 <script>
 const MANGA_SLUG = "{{ manga.slug }}";
+const MANGA_ID = {{ manga.id }};
 const TOTAL_PAGES = {{ manga.pages_count }};
 let pages = [];      // full size URLs (for main viewer)
 let pagesThumb = [];   // thumb URLs for strip (falls back to full)
@@ -311,10 +312,10 @@ let lastSingleTouchX = 0;
 let lastSingleTouchY = 0;
 
 async function loadMangaData() {
-    const cacheKey = 'manga_data_' + MANGA_SLUG;
+    const cacheKey = 'manga_data_' + (MANGA_ID || MANGA_SLUG);
     let data = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
     if (!data) {
-        const res = await fetch(`/api/manga/${MANGA_SLUG}`);
+        const res = await fetch(`/api/manga/${MANGA_ID || MANGA_SLUG}`);
         data = await res.json();
         data._cached_at = Date.now();
         sessionStorage.setItem(cacheKey, JSON.stringify(data));
@@ -323,18 +324,33 @@ async function loadMangaData() {
     pagesThumb = data.pages_thumb || data.pages; // prefer thumbs for the strip
     if (!pages.length) {
         alert("Нет страниц");
-        window.location.href = `/manga/${MANGA_SLUG}`;
+        window.location.href = `/manga/${MANGA_ID || MANGA_SLUG}`;
         return;
     }
-    renderThumbnails();
+    // preloading first images once per manga
+    for(let i = 0; i < Math.min(5, pages.length); i++) {
+        const img = new Image();
+        img.src = pages[i];
+    }
+    // renderThumbnails(); // temporarily disabled to reduce repeated thumbnail loads
 
-    // Support direct jump via ?page=N
+    // Support direct jump via ?page=N or /manga/id/N
     const params = new URLSearchParams(window.location.search);
-    const start = parseInt(params.get('page')) || 1;
+    let start = parseInt(params.get('page')) || {{ manga.start_page }} || 1;
+    const pathParts = window.location.pathname.split('/');
+    const lastPart = pathParts[pathParts.length - 1];
+    if (pathParts.length >= 3 && !isNaN(parseInt(lastPart))) {
+        start = parseInt(lastPart);
+    }
     // Preload large window for seamless (nhentai-like)
     const startIdx = start - 1;
     preloadPages(Math.max(0, startIdx - 3), startIdx + 12);
     goToPage(start, false);
+
+    // ensure nice URL /manga/id/N 
+    if (MANGA_ID && (window.location.pathname.includes('/read/') || window.location.search.includes('page='))) {
+        history.replaceState({page: start}, '', `/manga/${MANGA_ID}/${start}`);
+    }
 }
 
 function getPageUrl(index) { // 0-based
@@ -576,12 +592,18 @@ function goToPage(page, animate = true) {
                 })
             }).catch(() => {});
         }
-        window.location.href = '/manga/{{ manga.slug }}';
+        if (history.length > 1) { history.back(); } else { window.location.href = '/manga/{{ manga.id }}'; }
         return;
     }
     if (page === currentPage && animate) return;
     
     currentPage = page;
+
+    // update address bar to /manga/id/page without reload
+    if (MANGA_ID) {
+        const newUrl = `/manga/${MANGA_ID}/${page}`;
+        history.replaceState({page: page}, '', newUrl);
+    }
 
     // Preload the exact pages we will show, right now, before render
     const idx = currentPage - 1;
@@ -945,7 +967,7 @@ function setupKeyboard() {
             setFitMode(fitMode === 'width' ? 'height' : 'width');
         }
         if (e.key === 'Escape') {
-            window.location.href = `/manga/${MANGA_SLUG}`;
+            window.location.href = `/manga/${MANGA_ID || MANGA_SLUG}`;
         }
         if (e.key === '+' || e.key === '=') zoomIn(0.2);
         if (e.key === '-') zoomOut(0.2);

@@ -15,7 +15,7 @@
     {% if recommendations %}
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
         {% for m in recommendations %}
-        <a href="/manga/{{ m.slug }}" class="block group">
+        <a href="/manga/{{ m.id }}" class="block group">
             <div class="fakku-card rounded-2xl overflow-hidden border border-white/5 bg-[#111] modern-card">
                 <div class="relative">
                     <img src="{{ m.cover }}" class="manga-cover w-full transition duration-200 group-hover:scale-[1.015]" onerror="this.src='https://picsum.photos/id/1011/300/400'">
