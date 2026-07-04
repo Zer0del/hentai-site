@@ -311,8 +311,14 @@ let lastSingleTouchX = 0;
 let lastSingleTouchY = 0;
 
 async function loadMangaData() {
-    const res = await fetch(`/api/manga/${MANGA_SLUG}`);
-    const data = await res.json();
+    const cacheKey = 'manga_data_' + MANGA_SLUG;
+    let data = JSON.parse(sessionStorage.getItem(cacheKey) || 'null');
+    if (!data) {
+        const res = await fetch(`/api/manga/${MANGA_SLUG}`);
+        data = await res.json();
+        data._cached_at = Date.now();
+        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+    }
     pages = data.pages || [];                    // full size for main viewer
     pagesThumb = data.pages_thumb || data.pages; // prefer thumbs for the strip
     if (!pages.length) {

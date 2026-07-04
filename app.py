@@ -116,7 +116,7 @@ def set_bulk_root(path_str: str) -> Path:
 # ========================================================
 
 # Bulk state moved to bulk.py for modularity
-from bulk import configure_bulk, _bulk_import_worker
+# bulk import removed
 _bulk_lock = threading.RLock()
 _bulk_state = {
     "running": False,
@@ -197,27 +197,8 @@ def create_app():
             # Return 403 without details
             return "Access denied (IP not in whitelist).", 403
 
-    # Configure bulk here, after all names are defined
-    try:
-        configure_bulk(
-            BULK_BASE_URL=BULK_BASE_URL,
-            ADMIN_PASS=ADMIN_PASS,
-            BULK_PROGRESS_FILE=BULK_PROGRESS_FILE,
-            get_bulk_root=get_bulk_root,
-            HAS_BULK_HELPERS=HAS_BULK_HELPERS,
-            extract_first_page_from_archive=extract_first_page_from_archive if 'extract_first_page_from_archive' in globals() else None,
-            choose_best_archive=choose_best_archive if 'choose_best_archive' in globals() else None,
-            get_image_files=get_image_files if 'get_image_files' in globals() else None,
-            get_archive_files=get_archive_files if 'get_archive_files' in globals() else None,
-            create_pages_zip=create_pages_zip if 'create_pages_zip' in globals() else None,
-            _append_bulk_log=_append_bulk_log,
-            _force_wal_checkpoint=_force_wal_checkpoint,
-            _bulk_lock=_bulk_lock,
-            _bulk_state=_bulk_state,
-            _bulk_stop_requested=_bulk_stop_requested,
-        )
-    except Exception as e:
-        logger.warning("Bulk configure warning: %s", e)
+    # Bulk feature removed (per user request). Multiple ZIP uploads in admin form is the replacement for adding several mangas at once.
+    # (old bulk code left for reference but not used in UI/routes)
 
     @app.context_processor
     def inject_current_user():

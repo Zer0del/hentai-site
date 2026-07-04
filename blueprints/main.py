@@ -55,7 +55,7 @@ def index():
     latest_page = request.args.get('page', 1, type=int) or 1
     if latest_page < 1:
         latest_page = 1
-    latest_per_page = 24  # much larger to extend further down
+    latest_per_page = 30  # show 30 on main page
     start_idx = (latest_page - 1) * latest_per_page
     latest_raw = get_all_mangas(limit=latest_per_page, offset=start_idx)
 
@@ -357,6 +357,8 @@ def manga_detail(slug):
     """, (row['id'],)).fetchall()
     conn.close()
 
+    show_all = bool(request.args.get('show_all'))
+    preview_pages = page_images if show_all else page_images[:30]
     manga = {
         "id": row["id"],
         "slug": row["slug"],
@@ -368,7 +370,9 @@ def manga_detail(slug):
         "rating": avg,
         "rating_count": cnt,
         "pages_count": len(pages),
-        "pages": page_images,
+        "pages": preview_pages,
+        "show_all": show_all,
+        "total_pages": len(pages),
         "my_rating": my_rating,
         "is_favorite": is_favorite,
         "is_read": is_read,
@@ -498,10 +502,13 @@ def profile():
         JOIN mangas m ON m.id = h.manga_id
         WHERE h.user_id = ? ORDER BY h.last_read_at DESC LIMIT 100
     """, (user['id'],)).fetchall()
+    rating_map = {r['manga_id']: r['score'] for r in conn.execute(
+        "SELECT manga_id, score FROM user_ratings WHERE user_id=?", (user['id'],)
+    ).fetchall()}
     history = []
     for r in hist_rows:
         cover = get_cover_url(r, thumb=True)
-        history.append({**dict(r), "cover": cover})
+        history.append({**dict(r), "cover": cover, "my_score": rating_map.get(r['id'])})
 
     rating_rows = conn.execute("""
         SELECT m.* , ur.score FROM user_ratings ur

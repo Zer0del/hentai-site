@@ -77,6 +77,9 @@
                     {% if not h.completed %}
                     <div class="absolute bottom-1.5 right-1.5 text-[10px] px-1.5 py-px bg-black/70 rounded text-emerald-300 font-mono">стр. {{ h.last_page }}</div>
                     {% endif %}
+                    {% if h.my_score %}
+                    <div class="absolute top-1 right-1 px-1 py-px text-[8px] bg-amber-500/80 text-white font-mono rounded">★{{ h.my_score }}</div>
+                    {% endif %}
                 </div>
                 <div class="p-2.5">
                     <div class="text-sm font-medium truncate group-hover:text-[#e11d48]">{{ h.title }}</div>

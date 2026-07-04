@@ -214,17 +214,12 @@
                     
                     <!-- Nav links -->
                     <div class="hidden md:flex items-center gap-x-6 text-sm font-medium">
-                        <a href="/" class="nav-link text-white/85 hover:text-white">Библиотека</a>
                         <a href="/forum" class="nav-link text-white/85 hover:text-white">Форум</a>
                         {% set user = current_user if current_user is defined else None %}
                         {% if user and user.get('is_admin') %}
                         <a href="/admin" class="nav-link text-white/70 hover:text-white flex items-center gap-x-1.5">
                             <i class="fa-solid fa-plus text-xs"></i>
                             <span>Добавить</span>
-                        </a>
-                        <a href="/admin/bulk" class="nav-link text-white/70 hover:text-white text-xs flex items-center gap-x-1">
-                            <i class="fa-solid fa-file-import"></i>
-                            <span>Bulk</span>
                         </a>
                         {% endif %}
                     </div>
@@ -266,10 +261,6 @@
                         <span class="font-medium">ADMIN</span>
                     </a>
                     {% endif %}
-                    
-                    <div class="text-xs px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 hidden lg:block">
-                        Локальная библиотека
-                    </div>
                 </div>
             </div>
         </div>

@@ -136,11 +136,11 @@
     <div class="mt-20">
         <div class="uppercase text-xs tracking-widest font-semibold text-white/50 mb-2">Страницы (кликни, чтобы открыть)</div>
         <div id="pages-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-            {% for p in manga.pages[:30] %}
+            {% for p in manga.pages %}
             {% set idx = loop.index %}
             <a href="/read/{{ manga.slug }}?page={{ idx }}" class="group block">
                 <div class="relative rounded-md overflow-hidden border border-white/10 group-hover:border-[#e11d48] transition-all">
-                    <img src="{{ p }}" 
+                    <img data-src="{{ p }}" 
                          class="w-full aspect-[3/4] object-cover bg-zinc-900"
                          loading="lazy"
                          onerror="this.src='https://picsum.photos/id/1011/120/160'">
@@ -151,41 +151,28 @@
             </a>
             {% endfor %}
         </div>
-        {% if manga.pages|length > 30 %}
+        {% if not manga.show_all and manga.total_pages > 30 %}
         <div id="pages-more" class="relative -mt-8 h-16 bg-gradient-to-t from-black/95 via-black/70 to-transparent flex items-end justify-center pb-1">
-            <button onclick="showAllPreviews()" 
-                    class="px-4 py-1 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition">
-                Показать всё ({{ manga.pages|length }})
-            </button>
+            <a href="?show_all=1" 
+               class="px-4 py-1 text-xs bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition">
+                Показать всё ({{ manga.total_pages }})
+            </a>
         </div>
         {% endif %}
     </div>
     {% endif %}
 
 <script>
-const allPageUrls = {{ manga.pages | tojson }};
-function showAllPreviews() {
-  const grid = document.getElementById('pages-grid');
-  if (!grid || !allPageUrls) return;
-  grid.innerHTML = '';
-  allPageUrls.forEach((p, i) => {
-    const idx = i + 1;
-    const a = document.createElement('a');
-    a.href = `/read/{{ manga.slug }}?page=${idx}`;
-    a.className = 'group block';
-    a.innerHTML = `
-      <div class="relative rounded-md overflow-hidden border border-white/10 group-hover:border-[#e11d48] transition-all">
-        <img src="${p}" class="w-full aspect-[3/4] object-cover bg-zinc-900" loading="lazy" onerror="this.src='https://picsum.photos/id/1011/120/160'">
-        <div class="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] font-mono px-1 rounded">
-          ${idx}
-        </div>
-      </div>
-    `;
-    grid.appendChild(a);
+function loadPreviewImages() {
+  const imgs = document.querySelectorAll('#pages-grid img[data-src]');
+  imgs.forEach(img => {
+    if (img.dataset.src && !img.src) {
+      img.src = img.dataset.src;
+    }
   });
-  const more = document.getElementById('pages-more');
-  if (more) more.style.display = 'none';
 }
+
+document.addEventListener('DOMContentLoaded', loadPreviewImages);
 </script>
 
     <div class="mt-8 pt-6 border-t border-white/10 text-xs text-white/50">

@@ -326,6 +326,49 @@ def api_add_manga():
         slug = shared['slugify'](title)
 
         conn = shared['get_db']()
+        zip_files = request.files.getlist("zipfile")
+        if zip_files and len(zip_files) > 0:
+            # Bulk support: multiple ZIPs. Title from filename (or form title). Cover from form (if single) or first page.
+            added = []
+            for zf in zip_files:
+                if not zf.filename:
+                    continue
+                this_title = title or zf.filename.rsplit(".", 1)[0]
+                this_author = author
+                this_slug = shared['slugify'](this_title)
+                ex = conn.execute("SELECT id FROM mangas WHERE slug = ?", (this_slug,)).fetchone()
+                if ex:
+                    this_slug = f"{this_slug}-{shared['uuid'].uuid4().hex[:6]}"
+                this_manga_dir = shared['get_manga_dir'](this_slug)
+                try:
+                    pages = shared['extract_zip_and_normalize'](zf, this_manga_dir, "p")
+                except Exception as e:
+                    continue
+                if not pages:
+                    continue
+                if cover_file and len(zip_files) == 1:
+                    cname = shared['save_uploaded_file'](cover_file, this_manga_dir, "cover")
+                    if cname:
+                        cover_name = shared['_finalize_cover'](this_manga_dir, cname)
+                    else:
+                        cover_name = pages[0]
+                else:
+                    cover_name = pages[0]
+                try:
+                    conn.execute("""
+                        INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
+                    """, (this_slug, this_title, this_author, description, cover_name, json.dumps(pages), json.dumps(tags)))
+                    conn.commit()
+                    added.append(this_slug)
+                except Exception as e:
+                    continue
+            conn.close()
+            resp = {"ok": True, "added": len(added), "slugs": added}
+            if len(added) == 1:
+                resp["slug"] = added[0]
+            return jsonify(resp)
+
         existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (slug,)).fetchone()
         if existing:
             slug = f"{slug}-{shared['uuid'].uuid4().hex[:6]}"

@@ -3,22 +3,21 @@ import json
 import os
 import subprocess
 import datetime
+from pathlib import Path
+import shutil
+import uuid
 
 admin_bp = Blueprint('admin', __name__)
 
 def _get_shared():
     from app import (
         get_current_user, get_db, get_cover_url, get_all_mangas,
-        get_manga_by_slug, _append_bulk_log, _bulk_lock, _bulk_state,
-        _bulk_stop_requested,
-        _bulk_import_worker,
-        BULK_PROGRESS_FILE, ADMIN_PASS, get_bulk_root, _force_wal_checkpoint,
-        HAS_BULK_HELPERS, _scan_bulk_candidates, set_bulk_root
+        get_manga_by_slug, ADMIN_PASS, _force_wal_checkpoint,
+        slugify, get_manga_dir, extract_zip_and_normalize, save_uploaded_file, _finalize_cover,
+        _create_thumbnail
     )
     d = locals()
     d['ADMIN_PASS'] = ADMIN_PASS
-    d['BULK_PROGRESS_FILE'] = BULK_PROGRESS_FILE
-    d['set_bulk_root'] = set_bulk_root
     return d
 
 @admin_bp.route("/admin")
@@ -57,67 +56,11 @@ def admin_page():
     from app import ADMIN_PASS
     return render_template("admin.html", admin_pass=ADMIN_PASS, mangas=mangas)
 
-@admin_bp.route("/admin/bulk")
-def admin_bulk_page():
-    shared = _get_shared()
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return redirect(url_for('main.index'))
-    current_root = shared['get_bulk_root']()
-    root_exists = current_root.exists()
-    from app import ADMIN_PASS
-    return render_template(
-        "bulk.html",
-        bulk_root=str(current_root),
-        root_exists=root_exists,
-        admin_pass=ADMIN_PASS
-    )
+# Bulk removed - use multiple ZIP uploads in the main admin form instead
 
-@admin_bp.route("/api/bulk/scan", methods=["POST"])
-def api_bulk_scan():
-    shared = _get_shared()
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return jsonify({"error": "admin only"}), 403
+# Bulk scan/start etc removed
 
-    if not shared.get('HAS_BULK_HELPERS'):
-        return jsonify({"error": "bulk helpers not loaded"}), 500
-
-    candidates = shared['_scan_bulk_candidates']()
-
-    with shared['_bulk_lock']:
-        shared['_bulk_state']["items"] = candidates
-        shared['_bulk_state']["total"] = len(candidates)
-        shared['_bulk_state']["done"] = 0
-        shared['_bulk_state']["current"] = ""
-        if not shared['_bulk_state'].get("running"):
-            shared['_append_bulk_log'](f"Scanned {len(candidates)} manga folders.")
-
-    return jsonify({
-        "ok": True,
-        "count": len(candidates),
-        "items": candidates
-    })
-
-@admin_bp.route("/api/bulk/start", methods=["POST"])
-def api_bulk_start():
-    shared = _get_shared()
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return jsonify({"error": "admin only"}), 403
-
-    with shared['_bulk_lock']:
-        if shared['_bulk_state'].get("running"):
-            return jsonify({"error": "already running"}), 400
-        if not shared['_bulk_state'].get("items"):
-            return jsonify({"error": "nothing to import — run Scan first"}), 400
-
-        import threading
-        worker = shared.get('_bulk_import_worker') or shared.get('_bulk_import_worker_ref')
-        t = threading.Thread(target=worker or (lambda: None), daemon=True)
-        t.start()
-
-    return jsonify({"ok": True, "message": "Import started"})
+# Bulk removed - multiple ZIP upload in main form is the new way to add several mangas at once.
 
 @admin_bp.route("/api/bulk/stop", methods=["POST"])
 def api_bulk_stop():
@@ -374,5 +317,136 @@ def admin_ban_user():
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "banned_until": banned_until})
+
+@admin_bp.route("/api/mass_import", methods=["POST"])
+def api_mass_import():
+    shared = _get_shared()
+    user = shared['get_current_user']()
+    if not user or not user.get('is_admin'):
+        return jsonify({"error": "admin only"}), 403
+
+    root_str = request.form.get("root") or ""
+    if not root_str:
+        return jsonify({"error": "Укажите корневую папку"}), 400
+
+    root = Path(root_str)
+    if not root.exists() or not root.is_dir():
+        return jsonify({"error": "Папка не найдена или недоступна"}), 400
+
+    slugify = shared.get('slugify')
+    get_manga_dir = shared.get('get_manga_dir')
+    extract_zip_and_normalize = shared.get('extract_zip_and_normalize')
+    save_uploaded_file = shared.get('save_uploaded_file')
+    _finalize_cover = shared.get('_finalize_cover')
+    get_db = shared['get_db']
+
+    if not all([slugify, get_manga_dir, extract_zip_and_normalize]):
+        return jsonify({"error": "Не все функции доступны для импорта"}), 500
+
+    added = 0
+    conn = get_db()
+    try:
+        for author_dir in sorted(root.iterdir()):
+            if not author_dir.is_dir():
+                continue
+            author = author_dir.name
+            for item in sorted(author_dir.iterdir()):
+                if item.is_dir():
+                    title = item.name
+                    exts = {'.webp', '.jpg', '.jpeg', '.png', '.gif'}
+                    images = sorted(
+                        [f for f in item.iterdir() if f.is_file() and f.suffix.lower() in exts],
+                        key=lambda f: f.name
+                    )
+                    if not images:
+                        continue
+                    title = item.name
+                    manga_slug = slugify(title)
+                    existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (manga_slug,)).fetchone()
+                    if existing:
+                        manga_slug = f"{manga_slug}-{uuid.uuid4().hex[:6]}"
+                    manga_dir = get_manga_dir(manga_slug)
+                    pages = []
+                    for i, imgf in enumerate(images, 1):
+                        ext = imgf.suffix.lower()
+                        new_name = f"{i:03d}{ext}"
+                        dst = os.path.join(manga_dir, new_name)
+                        shutil.copy2(str(imgf), dst)
+                        pages.append(new_name)
+                    cover_name = pages[0]
+                    # duplicate first page as cover so finalize doesn't delete the page file
+                    cover_src = os.path.join(manga_dir, cover_name)
+                    temp_cover = "cover" + os.path.splitext(cover_name)[1]
+                    shutil.copy2(cover_src, os.path.join(manga_dir, temp_cover))
+                    cover_name = temp_cover
+                    # create thumbs like normal add
+                    if shared.get('_create_thumbnail'):
+                        for p in pages:
+                            full = os.path.join(manga_dir, p)
+                            base = os.path.splitext(p)[0]
+                            thumb_name = f"{base}-thumb.webp"
+                            try:
+                                shared['_create_thumbnail'](full, os.path.join(manga_dir, thumb_name), max_height=240)
+                            except:
+                                pass
+                    if _finalize_cover:
+                        try:
+                            cfinal = _finalize_cover(manga_dir, cover_name)
+                            if cfinal:
+                                cover_name = cfinal
+                        except:
+                            pass
+                    try:
+                        conn.execute("""
+                            INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
+                        """, (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
+                        conn.commit()
+                        added += 1
+                    except Exception as e:
+                        pass
+                elif item.is_file() and item.suffix.lower() in {'.zip', '.cbz'}:
+                    title = item.stem
+                    manga_slug = slugify(title)
+                    existing = conn.execute("SELECT id FROM mangas WHERE slug = ?", (manga_slug,)).fetchone()
+                    if existing:
+                        manga_slug = f"{manga_slug}-{uuid.uuid4().hex[:6]}"
+                    manga_dir = get_manga_dir(manga_slug)
+                    try:
+                        class FakeFile:
+                            def __init__(self, path):
+                                self.filename = item.name
+                                self._path = path
+                            def save(self, dst):
+                                shutil.copy2(self._path, dst)
+                        fake = FakeFile(str(item))
+                        pages = extract_zip_and_normalize(fake, manga_dir, "p")
+                        if not pages:
+                            continue
+                        cover_name = pages[0]
+                        # duplicate to prevent finalize deleting the page
+                        cover_src = os.path.join(manga_dir, cover_name)
+                        temp_cover = "cover" + os.path.splitext(cover_name)[1]
+                        shutil.copy2(cover_src, os.path.join(manga_dir, temp_cover))
+                        cover_name = temp_cover
+                        if _finalize_cover:
+                            try:
+                                cfinal = _finalize_cover(manga_dir, cover_name)
+                                if cfinal:
+                                    cover_name = cfinal
+                            except:
+                                pass
+                        conn.execute("""
+                            INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
+                        """, (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
+                        conn.commit()
+                        added += 1
+                    except Exception as e:
+                        pass
+    finally:
+        conn.close()
+
+    return jsonify({"ok": True, "added": added})
 
 print("admin blueprint loaded")

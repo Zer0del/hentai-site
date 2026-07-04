@@ -212,6 +212,9 @@ function updateResults() {
                 if (newContainer && current) {
                     current.innerHTML = newContainer.innerHTML;
                     if (window.initSmoothImages) window.initSmoothImages();
+                } else {
+                    // fallback
+                    current.innerHTML = doc.body.innerHTML;
                 }
             })
             .catch(() => form.submit());

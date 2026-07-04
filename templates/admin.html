@@ -47,17 +47,29 @@
                 </div>
 
                 <div>
-                    <label class="text-xs text-white/60 block mb-1">Страницы (изображения) или ZIP/CBZ</label>
+                    <label class="text-xs text-white/60 block mb-1">Страницы (изображения) или ZIP/CBZ (select multiple ZIPs for bulk)</label>
                     <div class="space-y-2">
                         <input type="file" name="pages" multiple accept="image/*" class="text-sm w-full">
                         <div class="text-center text-xs opacity-50">или</div>
-                        <input type="file" name="zipfile" accept=".zip,.cbz" class="text-sm w-full">
+                        <input type="file" name="zipfile" multiple accept=".zip,.cbz" class="text-sm w-full">
                     </div>
                 </div>
 
                 <button type="submit" class="mt-3 w-full fakku-btn rounded-2xl py-[14px] font-semibold">Добавить мангу в библиотеку</button>
                 <div id="admin-status" class="text-center text-sm text-white/60 mt-1"></div>
             </form>
+        </div>
+
+        <div class="mt-8 p-6 bg-[#111] rounded-3xl border border-white/10">
+            <h3 class="font-semibold text-lg mb-2">Массовый импорт с сервера</h3>
+            <p class="text-xs text-white/60 mb-3">Укажите корневую папку на сервере. Структура: <code>корень/Автор/НазваниеМанги/</code> (файлы .webp) или <code>корень/Автор/НазваниеМанги.zip</code>. Название и автор берутся из имён папок, обложка — первая страница, страницы сортируются по имени файла.</p>
+            <form onsubmit="doMassImport(event)">
+                <div class="flex gap-2">
+                    <input type="text" id="mass-root" value="/var/www/hentach/Manga" class="flex-1 bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-sm">
+                    <button type="submit" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-2xl text-sm">Импортировать все</button>
+                </div>
+            </form>
+            <div id="mass-status" class="mt-2 text-sm text-white/70"></div>
         </div>
 
         <div class="mt-6 text-xs text-white/40 px-2">
@@ -67,15 +79,6 @@
 
     <!-- Existing mangas list -->
     <div class="mt-10">
-        <!-- Bulk Import quick link -->
-        <div class="mb-6">
-            <a href="/admin/bulk"
-               class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 hover:brightness-110 rounded-2xl text-sm font-medium">
-                <i class="fa-solid fa-file-import"></i>
-                <span>Bulk Import — массовая загрузка из папок (с прогрессом)</span>
-            </a>
-            <span class="ml-3 text-xs text-white/50">Поддерживает .zip/.cbz внутри папок + первая страница как обложка</span>
-
             <a href="/admin/forum"
                class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-violet-600 hover:brightness-110 rounded-2xl text-sm font-medium ml-3">
                 <i class="fa-solid fa-comments"></i>
@@ -104,43 +107,52 @@
             <div class="text-sm text-white/50">{{ mangas|length }} тайтлов</div>
         </div>
 
+        <div class="mb-3">
+            <input type="text" id="admin-titles-search" placeholder="Поиск по названию или автору..." 
+                   class="w-full bg-[#1a1a1a] border border-white/10 rounded-2xl px-4 py-2 text-sm"
+                   oninput="filterAdminTitles()">
+        </div>
+
         {% if mangas %}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div id="admin-titles-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {% for m in mangas %}
-            <div class="bg-[#111] border border-white/10 rounded-2xl p-4 flex gap-4">
-                <div class="w-20 h-28 flex-shrink-0 rounded-xl overflow-hidden border border-white/10">
-                    <img src="{{ m.cover }}" class="w-full h-full object-cover" 
-                         onerror="this.src='https://picsum.photos/id/1011/80/112'">
+            <div class="bg-[#111] border border-white/10 rounded-2xl p-4">
+                <div class="font-semibold text-[15px] leading-tight mb-1">{{ m.title }}</div>
+                {% if m.author %}
+                <div class="text-[11px] text-white/50">{{ m.author }}</div>
+                {% endif %}
+                <div class="text-xs text-white/50 mb-1">{{ m.pages_count }} стр.</div>
+
+                {% if m.tags %}
+                <div class="flex flex-wrap gap-1 mb-2">
+                    {% for t in m.tags[:4] %}
+                    <span class="text-[10px] px-1.5 py-px bg-white/5 rounded">{{ t }}</span>
+                    {% endfor %}
                 </div>
-                <div class="flex-1 min-w-0 flex flex-col">
-                    <div class="font-semibold text-[15px] leading-tight mb-1">{{ m.title }}</div>
-                    {% if m.author %}
-                    <div class="text-[11px] text-white/50">{{ m.author }}</div>
-                    {% endif %}
-                    <div class="text-xs text-white/50 mb-1">{{ m.pages_count }} стр.</div>
+                {% endif %}
 
-                    {% if m.tags %}
-                    <div class="flex flex-wrap gap-1 mb-2">
-                        {% for t in m.tags[:4] %}
-                        <span class="text-[10px] px-1.5 py-px bg-white/5 rounded">{{ t }}</span>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-
-                    <div class="mt-auto flex gap-2">
-                        <a href="/manga/{{ m.slug }}" 
-                           class="text-xs px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 flex-1 text-center">Открыть</a>
-                        
-                        <button onclick="adminEditManga('{{ m.slug }}')"
-                                class="text-xs px-3 py-1.5 rounded-xl bg-[#e11d48]/90 hover:bg-[#e11d48] flex-1">Редактировать</button>
-                        
-                        <button data-slug="{{ m.slug }}" data-title="{{ m.title }}" onclick="adminDeleteManga(this)"
-                                class="text-xs px-3 py-1.5 rounded-xl bg-red-900/70 hover:bg-red-900 text-white">Удалить</button>
-                    </div>
+                <div class="mt-2 flex gap-2">
+                    <a href="/manga/{{ m.slug }}" 
+                       class="text-xs px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 flex-1 text-center">Открыть</a>
+                    
+                    <button onclick="adminEditManga('{{ m.slug }}')"
+                            class="text-xs px-3 py-1.5 rounded-xl bg-[#e11d48]/90 hover:bg-[#e11d48] flex-1">Редактировать</button>
+                    
+                    <button data-slug="{{ m.slug }}" data-title="{{ m.title }}" onclick="adminDeleteManga(this)"
+                            class="text-xs px-3 py-1.5 rounded-xl bg-red-900/70 hover:bg-red-900 text-white">Удалить</button>
                 </div>
             </div>
             {% endfor %}
         </div>
+
+        {% if mangas|length > 9 %}
+        <div class="mt-4 text-center">
+            <button onclick="showAllAdminTitles()" class="px-4 py-1.5 text-xs bg-white/10 hover:bg-white/20 rounded-2xl border border-white/10">
+                Показать все ({{ mangas|length }})
+            </button>
+        </div>
+        {% endif %}
+
         {% else %}
         <div class="text-white/50 text-sm">Пока ничего нет. Добавьте первую мангу выше.</div>
         {% endif %}
@@ -227,9 +239,14 @@ async function submitAdminForm(e) {
         
         if (r.ok && j.ok) {
             status.innerHTML = `<span class="text-emerald-400 font-medium">Успех! Перенаправление на страницу тайтла...</span>`;
-            setTimeout(() => {
-                window.location = '/manga/' + j.slug;
-            }, 650);
+            const slug = j.slug || (j.slugs && j.slugs[0]);
+            if (slug) {
+                setTimeout(() => {
+                    window.location = '/manga/' + slug;
+                }, 650);
+            } else if (j.added > 1) {
+                status.innerHTML = `<span class="text-emerald-400 font-medium">Добавлено ${j.added} тайтлов.</span>`;
+            }
         } else {
             status.innerHTML = `<span class="text-red-400">${j.error || 'Ошибка'}</span>`;
         }
@@ -237,6 +254,83 @@ async function submitAdminForm(e) {
         status.innerHTML = `<span class="text-red-400">Сетевая ошибка</span>`;
     }
 }
+
+async function doMassImport(e) {
+    e.preventDefault();
+    const status = document.getElementById('mass-status');
+    const root = document.getElementById('mass-root').value.trim();
+    if (!root) {
+        status.innerHTML = '<span class="text-red-400">Укажите путь</span>';
+        return;
+    }
+    status.innerHTML = 'Импортируем...';
+    try {
+        const fd = new FormData();
+        fd.append('root', root);
+        const r = await fetch('/api/mass_import', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (r.ok && j.ok) {
+            status.innerHTML = `<span class="text-emerald-400">Добавлено: ${j.added}. Обновите страницу.</span>`;
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            status.innerHTML = `<span class="text-red-400">${j.error || 'Ошибка'}</span>`;
+        }
+    } catch (err) {
+        status.innerHTML = `<span class="text-red-400">Ошибка: ${err.message}</span>`;
+    }
+}
+
+function filterAdminTitles() {
+    const q = (document.getElementById('admin-titles-search').value || '').toLowerCase().trim();
+    const grid = document.getElementById('admin-titles-grid');
+    if (!grid) return;
+    const cards = Array.from(grid.querySelectorAll('.bg-\\[\\#111\\]'));
+    let shown = 0;
+    const max = 9;
+    cards.forEach(card => {
+        const titleEl = card.querySelector('.font-semibold');
+        const authorEl = card.querySelector('.text-\\[11px\\]');
+        const title = (titleEl?.textContent || '').toLowerCase();
+        const author = (authorEl?.textContent || '').toLowerCase();
+        const match = !q || title.includes(q) || author.includes(q);
+        if (q) {
+            card.style.display = match ? '' : 'none';
+        } else {
+            card.style.display = (match && shown < max) ? '' : 'none';
+            if (match) shown++;
+        }
+    });
+}
+
+let allTitlesShown = false;
+function showAllAdminTitles() {
+    const grid = document.getElementById('admin-titles-grid');
+    if (!grid) return;
+    grid.querySelectorAll('.bg-\\[\\#111\\]').forEach(c => c.style.display = '');
+    allTitlesShown = true;
+    const parent = grid.parentElement;
+    const btns = parent.querySelectorAll('button');
+    btns.forEach(b => { if (b.textContent.includes('Показать все')) b.style.display = 'none'; });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const grid = document.getElementById('admin-titles-grid');
+    if (grid) {
+        const cards = Array.from(grid.querySelectorAll('.bg-\\[\\#111\\]'));
+        cards.forEach((card, i) => {
+            if (i >= 9) card.style.display = 'none';
+        });
+    }
+    // also wire the search to reset limit on type
+    const search = document.getElementById('admin-titles-search');
+    if (search) {
+        search.addEventListener('input', () => {
+            if (search.value.trim()) {
+                // when searching show all matches
+            }
+        });
+    }
+});
 
 // ===== Edit / Delete from admin list =====
 let currentEditSlug = null;
