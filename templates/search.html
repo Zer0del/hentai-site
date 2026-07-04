@@ -200,6 +200,7 @@ function updateResults() {
         const form = document.getElementById('search-form');
         if (!form) return;
         const params = new URLSearchParams(new FormData(form));
+        params.delete('page'); // reset to page 1 when filters change
         // fetch full page and replace the results container (simple & reliable)
         fetch('/search?' + params.toString())
             .then(r => r.text())
@@ -221,7 +222,8 @@ function updateResults() {
 const form = document.getElementById('search-form');
 if (form) {
     form.querySelectorAll('input, select').forEach(el => {
-        const event = (el.type === 'text' || el.tagName === 'INPUT' && el.name === 'q') ? 'input' : 'change';
+        const isTextLike = el.type === 'text' || el.type === 'number' || el.type === 'search' || (el.tagName === 'INPUT' && el.name === 'q');
+        const event = isTextLike ? 'input' : 'change';
         el.addEventListener(event, updateResults);
     });
     // Prevent default submit (we use live)

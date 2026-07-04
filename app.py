@@ -801,23 +801,21 @@ def _bulk_import_worker():
                     "tags": "",
                     "description": f"Imported via bulk UI ({item.get('type','')})",
                 }
-                files = {
-                    "cover": (Path(cover_path).name, open(cover_path, "rb"), "image/*"),
-                    "zipfile": (f"{title}.zip", open(zip_path, "rb"), "application/zip"),
-                }
+                cover_fh = open(cover_path, "rb")
+                zip_fh = open(zip_path, "rb")
+                data["cover"] = (Path(cover_path).name, cover_fh, "image/*")
+                data["zipfile"] = (f"{title}.zip", zip_fh, "application/zip")
 
                 resp = client.post(
                     "/api/add_manga",
                     data=data,
-                    files=files,
                 )
 
                 # close files
-                for fh in files.values():
-                    try:
-                        fh[1].close()
-                    except:
-                        pass
+                try: cover_fh.close()
+                except: pass
+                try: zip_fh.close()
+                except: pass
 
                 ok = False
                 err = ""
