@@ -1,10 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}Читалка — {{ manga.title }} • FAKKU{% endblock %}
+{% block title %}Читалка — {{ manga.title }} • Hentach{% endblock %}
 
 {% block head %}
 <style>
-    .reader-bg { background: #000; position: relative; }
+    /* Remove global site navbar and footer in reader so the reader toolbar becomes the top bar */
+    nav, footer {
+        display: none !important;
+    }
+
+    .reader-bg { 
+        background: #0a0a0a; 
+        position: relative; 
+        /* subtle vignette for depth */
+        background-image: radial-gradient(circle at center, #111 0%, #050505 70%, #000 100%);
+    }
     .reader-toolbar {
         background: linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.6));
         backdrop-filter: blur(12px);
@@ -15,7 +25,7 @@
         align-items: center;
         justify-content: center;
         width: 100%;
-        height: calc(100vh - 56px - 90px); /* toolbar + bottom strip to ensure last page fits fully */
+        height: calc(100vh - 56px - 90px); /* toolbar (now top bar) + bottom strip */
         overflow: hidden;
         user-select: none;
         touch-action: pan-x pan-y;
@@ -43,13 +53,25 @@
         max-height: 100%;
         display: block;
         pointer-events: none;
-        box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+        /* thin border + soft shadow to separate page from dark bg */
+        border: 1px solid #222;
+        box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.6), 0 0 0 1px rgba(255,255,255,0.035);
         image-rendering: auto;
         opacity: 0;
-        transition: opacity 0.1s ease-in;
+        transition: opacity 0.08s ease-out;
+        will-change: opacity;
+        border-radius: 2px;
     }
     .reader-image.loaded {
         opacity: 1;
+    }
+
+    /* Temporary absolute covers used during page turn to mask src-swap timing (double-buffering) */
+    .page-swap-cover {
+        position: absolute;
+        pointer-events: none;
+        z-index: 5;
+        box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
     }
 
     .double-page {
@@ -89,6 +111,12 @@
         right: 0;
         z-index: 50;
         pointer-events: none;
+        transition: opacity 0.22s ease;
+        opacity: 1;
+    }
+    #reader-bottom.hidden {
+        opacity: 0;
+        pointer-events: none;
     }
     #reader-bottom .thumbnails-strip {
         pointer-events: auto;
@@ -96,11 +124,9 @@
 
     /* Mobile: top panel removed */
     @media (hover: none) and (pointer: coarse) {
-        .reader-toolbar {
-            display: none !important;
-        }
+        /* Keep reader-toolbar visible as the top bar (replaces removed site nav) */
         .reader-image-container {
-            height: calc(100vh - 70px) !important; /* leave room for controls */
+            height: calc(100vh - 56px - 70px) !important; /* toolbar + bottom area */
         }
     }
 
@@ -299,9 +325,9 @@ async function loadMangaData() {
     // Support direct jump via ?page=N
     const params = new URLSearchParams(window.location.search);
     const start = parseInt(params.get('page')) || 1;
-    // Preload current + ahead immediately for seamless start
+    // Preload large window for seamless (nhentai-like)
     const startIdx = start - 1;
-    preloadPages(startIdx, startIdx + 5);
+    preloadPages(Math.max(0, startIdx - 3), startIdx + 12);
     goToPage(start, false);
 }
 
@@ -347,67 +373,143 @@ function updateUI() {
 
 function renderCurrentImage() {
     const wrapper = document.getElementById('image-wrapper');
-    wrapper.innerHTML = '';
     wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
     
     const idx = currentPage - 1;
+    let indices = [idx];
     
     if (isDouble) {
-        // Double page
         wrapper.classList.add('double-page');
-        
         let leftIdx = idx;
         let rightIdx = idx + 1;
         if (rightIdx >= pages.length) rightIdx = leftIdx;
-        
         if (direction === 'rtl') {
             let tmp = leftIdx; leftIdx = rightIdx; rightIdx = tmp;
         }
-        
-        const img1 = document.createElement('img');
-        img1.className = 'reader-image';
-        img1.src = getPageUrl(leftIdx);
-        img1.decoding = 'async';
-        img1.fetchPriority = 'high';
-        img1.onerror = () => { img1.src = 'https://picsum.photos/id/1011/600/800'; };
-        img1.onload = () => { img1.classList.add('loaded'); };
-        
-        const img2 = document.createElement('img');
-        img2.className = 'reader-image';
-        img2.src = getPageUrl(rightIdx);
-        img2.decoding = 'async';
-        if (leftIdx === rightIdx) img2.fetchPriority = 'high';
-        img2.onerror = () => { img2.src = 'https://picsum.photos/id/1011/600/800'; };
-        img2.onload = () => { img2.classList.add('loaded'); };
-        
-        wrapper.appendChild(img1);
-        if (leftIdx !== rightIdx) wrapper.appendChild(img2);
+        indices = [leftIdx, rightIdx];
     } else {
         wrapper.classList.remove('double-page');
-        const img = document.createElement('img');
-        img.className = 'reader-image';
-        img.src = getPageUrl(idx);
-        img.decoding = 'async';
-        img.fetchPriority = 'high';
-        img.onerror = () => { img.src = 'https://picsum.photos/id/1011/600/800'; };
-        img.onload = () => { img.classList.add('loaded'); };
-        wrapper.appendChild(img);
     }
 
-    // If from preload cache, show immediately for seamless flip (no flicker)
-    wrapper.querySelectorAll('img').forEach(img => {
-        if (img.complete || (window._preloaded && window._preloaded[img.src])) {
-            img.classList.add('loaded');
+    // --- Core anti-flash logic (following the provided recommendations) ---
+    // For normal page turns (same # of images): use live elements + absolute overlay covers
+    //   (old picture stays visible via cover while we swap src underneath + wait for paint).
+    //   This is true double-buffering without changing element count in flow.
+    // For first render or when count changes (double/single toggle): append fresh imgs then prune.
+    // Preloads + 'complete' check + no decoding=async + will-change + short opacity fade.
+    const currentImgs = Array.from(wrapper.querySelectorAll('img.reader-image'));
+    const needed = indices.length;
+    const countStable = (currentImgs.length === needed && needed > 0);
+
+    if (countStable && zoomLevel <= 1.05) {
+        // Stable count + normal zoom (most paging): double-buffer with absolute covers.
+        // Old picture remains fully visible on top via clone while we update src on the
+        // underlying element and wait for it to paint. No black, no layout shift.
+        const covers = [];
+        currentImgs.forEach((img, slot) => {
+            const url = getPageUrl(indices[slot]);
+
+            const cover = img.cloneNode(true);
+            cover.classList.add('page-swap-cover', 'loaded');
+            cover.style.transition = 'opacity 0.08s ease-out';
+
+            // Place exactly over the real img (use visual rect; safe at scale ~1)
+            const imgRect = img.getBoundingClientRect();
+            const wrapRect = wrapper.getBoundingClientRect();
+            const left = imgRect.left - wrapRect.left;
+            const top = imgRect.top - wrapRect.top;
+            cover.style.left = left + 'px';
+            cover.style.top = top + 'px';
+            cover.style.width = imgRect.width + 'px';
+            cover.style.height = imgRect.height + 'px';
+            cover.style.maxWidth = 'none';
+            cover.style.maxHeight = 'none';
+
+            wrapper.appendChild(cover);
+            covers.push(cover);
+
+            if (img.src !== url) {
+                const handleReady = () => {
+                    const c = covers[slot];
+                    if (c && c.parentNode) {
+                        c.style.opacity = '0';
+                        setTimeout(() => {
+                            if (c && c.parentNode) c.parentNode.removeChild(c);
+                        }, 90);
+                    }
+                    img.classList.add('loaded');
+                };
+                img.addEventListener('load', handleReady, { once: true });
+
+                img.src = url;
+
+                if (img.complete) {
+                    const c = covers[slot];
+                    if (c && c.parentNode) c.parentNode.removeChild(c);
+                    img.classList.add('loaded');
+                }
+            } else {
+                if (cover && cover.parentNode) cover.parentNode.removeChild(cover);
+            }
+        });
+    } else if (countStable) {
+        // Zoomed or edge case: simple in-place src update (with opacity masking)
+        currentImgs.forEach((img, slot) => {
+            const url = getPageUrl(indices[slot]);
+            if (img.src !== url) {
+                img.classList.remove('loaded');
+                const h = () => { img.classList.add('loaded'); };
+                img.addEventListener('load', h, { once: true });
+                img.src = url;
+                if (img.complete) {
+                    const pt = img.style.transition;
+                    img.style.transition = 'none';
+                    img.classList.add('loaded');
+                    void img.offsetWidth;
+                    requestAnimationFrame(() => { img.style.transition = pt || ''; });
+                }
+            }
+        });
+    } else {
+        // Count changed (double toggle) or first render: append fresh then remove old
+        const oldImgs = currentImgs;
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < needed; i++) {
+            const url = getPageUrl(indices[i]);
+            const img = document.createElement('img');
+            img.className = 'reader-image';
+            img.loading = 'eager';
+            img.fetchPriority = 'high';
+            img.onerror = function() { this.src = 'https://picsum.photos/id/1011/600/800'; };
+
+            img.classList.remove('loaded');
+            const handleLoad = () => { img.classList.add('loaded'); };
+            img.addEventListener('load', handleLoad, { once: true });
+
+            img.src = url;
+            if (img.complete) {
+                const prevT = img.style.transition;
+                img.style.transition = 'none';
+                img.classList.add('loaded');
+                void img.offsetWidth;
+                requestAnimationFrame(() => { img.style.transition = prevT || ''; });
+            }
+            frag.appendChild(img);
         }
-    });
-    
+        wrapper.appendChild(frag);
+
+        oldImgs.forEach(old => {
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+        });
+    }
+
     applyFit();
     updateUI();
 }
 
 function applyFit() {
     const wrapper = document.getElementById('image-wrapper');
-    const imgs = wrapper.querySelectorAll('img');
+    const imgs = wrapper.querySelectorAll('img.reader-image');
     
     imgs.forEach(img => {
         img.style.maxWidth = '';
@@ -454,16 +556,40 @@ function setFitMode(mode) {
 
 function goToPage(page, animate = true) {
     if (page < 1) page = 1;
-    if (page > TOTAL_PAGES) page = TOTAL_PAGES;
+    if (page > TOTAL_PAGES) {
+        // Reached / turned past last page → mark completed then return to manga page
+        const finalPage = TOTAL_PAGES;
+        if (window.CURRENT_USER_ID && TOTAL_PAGES > 0) {
+            fetch('/api/progress', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    manga_id: {{ manga.id if manga.id is defined else 0 }},
+                    last_page: finalPage,
+                    total: TOTAL_PAGES
+                })
+            }).catch(() => {});
+        }
+        window.location.href = '/manga/{{ manga.slug }}';
+        return;
+    }
     if (page === currentPage && animate) return;
     
     currentPage = page;
 
-    // Ensure the pages we are about to show are preloaded (fixes black screen on flip and return)
+    // Preload the exact pages we will show, right now, before render
     const idx = currentPage - 1;
-    preloadPages(idx, idx + (isDouble ? 1 : 0));
     if (isDouble) {
-        preloadPages(idx + 1, idx + 1);
+        let l = idx;
+        let r = idx + 1;
+        if (r >= pages.length) r = l;
+        preloadPages(l, l);
+        preloadPages(r, r);
+        preloadPages(l, l + 8);
+        preloadPages(r, r + 8);
+    } else {
+        preloadPages(idx, idx);
+        preloadPages(idx, idx + 10);
     }
 
     renderCurrentImage();
@@ -487,28 +613,37 @@ function goToPage(page, animate = true) {
 
 function nextPage() {
     let next = currentPage + (isDouble ? 2 : 1);
-    if (next > TOTAL_PAGES) next = TOTAL_PAGES;
-    // Preload target pages for seamless (no black, instant)
+    // If beyond last -> goToPage will redirect to manga detail
     const idx = next - 1;
-    preloadPages(idx, idx + (isDouble ? 1 : 0));
+    if (idx < pages.length) {
+        preloadPages(idx, idx);
+        if (isDouble && idx + 1 < pages.length) {
+            preloadPages(idx + 1, idx + 1);
+        }
+    }
     goToPage(next);
-    // Aggressive forward preload
-    setTimeout(() => preloadPages(idx, idx + (isDouble ? 7 : 6)), 10);
 }
 
 function prevPage() {
     let prev = currentPage - (isDouble ? 2 : 1);
     if (prev < 1) prev = 1;
     const idx = prev - 1;
-    preloadPages(idx, idx + (isDouble ? 1 : 0));
+    preloadPages(idx, idx);
     goToPage(prev);
-    setTimeout(() => preloadPages(Math.max(0, idx - 3), idx), 10);
 }
 
 function toggleDoublePage() {
     isDouble = !isDouble;
     // adjust current page if needed
     if (isDouble && currentPage % 2 === 0) currentPage -= 1;
+
+    // Preload the (possibly new) page(s) that will be shown
+    const idx = currentPage - 1;
+    preloadPages(idx, idx);
+    if (isDouble) {
+        const r = Math.min(idx + 1, pages.length - 1);
+        preloadPages(r, r);
+    }
     renderCurrentImage();
     setTimeout(preloadAdjacent, 50);
 }
@@ -532,7 +667,7 @@ function updateFocusOnZoom() {
     if (isFocused) {
       root.classList.add('reader-focused');
       document.body.style.overflow = 'hidden';
-      if (bottomBar) bottomBar.style.display = 'none';
+      if (bottomBar) bottomBar.classList.add('hidden');
     } else {
       root.classList.remove('reader-focused');
       document.body.style.overflow = '';
@@ -712,7 +847,7 @@ function setupZoomPan() {
                 const bottom = document.getElementById('reader-bottom');
                 if (bottom) {
                     bottomVisible = !bottomVisible;
-                    bottom.style.display = bottomVisible ? '' : 'none';
+                    if (bottomVisible) bottom.classList.remove('hidden'); else bottom.classList.add('hidden');
                 }
             }
         });
@@ -783,7 +918,7 @@ function setupZoomPan() {
                 const bottom = document.getElementById('reader-bottom');
                 if (bottom) {
                     bottomVisible = !bottomVisible;
-                    bottom.style.display = bottomVisible ? '' : 'none';
+                    if (bottomVisible) bottom.classList.remove('hidden'); else bottom.classList.add('hidden');
                 }
             }
         });
@@ -832,7 +967,7 @@ function setupKeyboard() {
             document.documentElement.classList.remove('reader-focused');
             const bottomBar = document.getElementById('reader-bottom');
             const thumbs = document.getElementById('thumbnails');
-            if (bottomBar) bottomBar.style.display = '';
+            if (bottomBar) bottomBar.classList.remove('hidden');
             if (thumbs) thumbs.style.display = 'flex';
             document.body.style.overflow = '';
             bottomVisible = true;
@@ -876,19 +1011,14 @@ function preloadPages(startIdx, endIdx) {
 }
 
 function preloadAdjacent() {
-    // Preload pages ahead for seamless flipping (no black screen, no flicker)
-    const ahead = isDouble ? 6 : 5;
-    const behind = 3;
+    // Very aggressive preload for seamless flipping (no flicker, nhentai style)
+    const ahead = isDouble ? 12 : 10;
+    const behind = 5;
 
     const idx = currentPage - 1;  // 0-based
 
-    // Preload current + forward
     preloadPages(idx, idx + ahead);
-
-    // Backward
     preloadPages(Math.max(0, idx - behind), idx);
-
-    // Extra for double page
     if (isDouble) {
         preloadPages(idx + 1, idx + 1 + ahead);
     }
@@ -918,7 +1048,7 @@ function initReader() {
 
             // Bottom hidden by default, shown only after tap
             const bottomBar = document.getElementById('reader-bottom');
-            if (bottomBar) bottomBar.style.display = 'none';
+            if (bottomBar) bottomBar.classList.add('hidden');
 
             // Fit page to screen, prevent vertical scroll
             const container = document.getElementById('viewer');
@@ -942,7 +1072,7 @@ function initReader() {
                 thumbnailsStrip.style.display = 'flex';
               }
               if (bottomBar && !isFocused) {
-                bottomBar.style.display = '';
+                bottomBar.classList.remove('hidden');
               }
               if (hideBottomTimeout) {
                 clearTimeout(hideBottomTimeout);
@@ -1009,6 +1139,6 @@ function initReader() {
 document.addEventListener('DOMContentLoaded', initReader);
 
 // Expose some debug
-window.FAKKU_READER = { goToPage, nextPage, prevPage, toggleDoublePage, setFitMode };
+window.HENTACH_READER = { goToPage, nextPage, prevPage, toggleDoublePage, setFitMode };
 </script>
 {% endblock %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}FAKKU • Библиотека{% endblock %}
+{% block title %}Hentach • Библиотека{% endblock %}
 
 {% block content %}
 <div class="max-w-screen-2xl mx-auto px-6 pt-6 pb-12">
@@ -21,14 +21,13 @@
                         <img src="{{ m.cover }}" class="manga-cover w-full aspect-[3/4] object-cover transition duration-200 group-hover:scale-[1.02]" loading="lazy" onerror="this.src='https://picsum.photos/id/1011/300/400'">
                         {% set r = m.rating or m.avg_rating or 0 %}
                         {% if r > 0 %}
-                        <div class="absolute top-2 left-2 text-[10px] px-1.5 py-px bg-black/75 backdrop-blur rounded text-white/95 flex items-center gap-px font-medium">
-                            <i class="fa-solid fa-star text-amber-400 text-[9px]"></i> <span class="ml-px">{{ '%.1f'|format(r) }}</span>
+                        <div class="absolute top-2 left-2 text-xs px-1.5 py-px bg-black/75 backdrop-blur rounded text-white/95 flex items-center gap-px font-medium">
+                            <i class="fa-solid fa-star text-amber-400 text-[10px]"></i> <span class="ml-px font-semibold">{{ '%.1f'|format(r) }}</span>
                         </div>
                         {% endif %}
                     </div>
                     <div class="px-3 py-2">
                         <div class="font-semibold text-[13px] leading-snug line-clamp-2 group-hover:text-[#e11d48] transition-colors">{{ m.title }}</div>
-                        {% if m.author %}<div class="text-[10px] text-white/50 mt-0.5 truncate">{{ m.author }}</div>{% endif %}
                     </div>
                 </div>
             </a>
@@ -68,18 +67,15 @@
                         </div>
                         
                         {% if m.rating > 0 %}
-                        <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-xs text-white/90">
-                            <i class="fa-solid fa-star text-[#f59e0b] text-[10px]"></i>
-                            <span class="font-medium ml-0.5">{{ '%.1f'|format(m.rating) }}</span>
+                        <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-sm text-white/90">
+                            <i class="fa-solid fa-star text-[#f59e0b]"></i>
+                            <span class="font-semibold ml-0.5 text-[13px]">{{ '%.1f'|format(m.rating) }}</span>
                         </div>
                         {% endif %}
                     </div>
 
                     <div class="px-3 py-2.5">
                         <div class="manga-title font-semibold text-[13.5px] leading-snug text-white group-hover:text-[#e11d48] transition" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">{{ m.title }}</div>
-                        {% if m.author %}
-                        <div class="text-[10px] text-white/50 mt-0.5">{{ m.author }}</div>
-                        {% endif %}
 
                         {% if m.tags %}
                         <div class="flex flex-wrap gap-x-1 gap-y-px mt-1.5">
@@ -95,22 +91,18 @@
             {% endfor %}
         </div>
 
-        <!-- Pagination for latest added with direct page select -->
+        <!-- Pagination for latest added: clean ← N / M → with clickable number for input -->
         {% if total_latest_pages and total_latest_pages > 1 %}
-        <div class="flex justify-center items-center gap-2 mt-6 text-sm">
+        <div class="flex justify-center items-center gap-1.5 mt-6 text-sm page-nav" data-base-url="?page=">
             {% if latest_page > 1 %}
-            <a href="?page={{ latest_page - 1 }}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">←</a>
+            <a href="?page={{ latest_page - 1 }}" class="nav-arrow">←</a>
             {% endif %}
 
-            <form onsubmit="if(this.page.value) window.location='?page=' + this.page.value; return false;" class="flex items-center gap-1">
-                <input type="number" name="page" min="1" max="{{ total_latest_pages }}" value="{{ latest_page }}" 
-                       class="w-16 bg-white/5 border border-white/10 rounded-full px-2 py-0.5 text-center text-sm outline-none">
-                <span class="text-white/50">/ {{ total_latest_pages }}</span>
-                <button type="submit" class="px-2 py-0.5 bg-white/5 hover:bg-white/10 rounded-full text-xs">Перейти</button>
-            </form>
+            <span class="page-num" onclick="openPageInput(this, {{ latest_page }}, {{ total_latest_pages }})">{{ latest_page }}</span>
+            <span class="text-white/40">/ {{ total_latest_pages }}</span>
 
             {% if latest_page < total_latest_pages %}
-            <a href="?page={{ latest_page + 1 }}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">→</a>
+            <a href="?page={{ latest_page + 1 }}" class="nav-arrow">→</a>
             {% endif %}
         </div>
         {% endif %}

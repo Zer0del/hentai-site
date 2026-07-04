@@ -1,3 +1,5 @@
 flask
 Pillow
 requests
+# werkzeug is a dependency of flask but listed for clarity
+werkzeug

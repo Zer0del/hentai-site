@@ -264,6 +264,7 @@ def search_page():
             continue
 
         cover = get_cover_url(m, thumb=True)
+        pages_json = m["pages"] or "[]"
         results.append({
             "id": m["id"],
             "slug": m["slug"],
@@ -273,7 +274,7 @@ def search_page():
             "tags": tags,
             "rating": avg,
             "rating_count": cnt,
-            "pages_count": len(json.loads(m["pages"] or "[]")),
+            "pages_count": len(json.loads(pages_json)),
             "is_read": is_read,
         })
 
@@ -495,7 +496,7 @@ def profile():
         SELECT m.*, h.last_page, h.completed, h.last_read_at
         FROM user_history h
         JOIN mangas m ON m.id = h.manga_id
-        WHERE h.user_id = ? ORDER BY h.last_read_at DESC LIMIT 20
+        WHERE h.user_id = ? ORDER BY h.last_read_at DESC LIMIT 100
     """, (user['id'],)).fetchall()
     history = []
     for r in hist_rows:
@@ -503,10 +504,15 @@ def profile():
         history.append({**dict(r), "cover": cover})
 
     rating_rows = conn.execute("""
-        SELECT m.title, m.slug, ur.score FROM user_ratings ur
+        SELECT m.* , ur.score FROM user_ratings ur
         JOIN mangas m ON m.id = ur.manga_id
         WHERE ur.user_id = ? ORDER BY ur.rated_at DESC
     """, (user['id'],)).fetchall()
+    ratings = []
+    for r in rating_rows:
+        rd = dict(r)
+        rd["cover"] = get_cover_url(r, thumb=True)
+        ratings.append(rd)
 
     conn.close()
 
@@ -517,7 +523,7 @@ def profile():
     if user.get('is_premium'):
         recommendations = get_recommendations(user['id'], limit=6)
 
-    return render_template("profile.html", user=user, favorites=favorites, history=history, my_ratings=rating_rows, recommendations=recommendations, tag_weights=sorted_weights)
+    return render_template("profile.html", user=user, favorites=favorites, history=history, my_ratings=ratings, recommendations=recommendations, tag_weights=sorted_weights, show_full_history=bool(request.args.get('show_full_history')))
 
 @main_bp.route("/u/<username>")
 def public_showcase(username):
@@ -531,7 +537,10 @@ def public_showcase(username):
     user_dict = dict(user) if user else {}
     if not user or not user_dict.get('showcase_public', 1):
         conn.close()
-        abort(404)
+        # Friendly instead of hard error page
+        return render_template("public_showcase.html", 
+                               profile_user={"username": username, "hidden": True}, 
+                               favorites=[], my_ratings=[], tag_weights=[])
 
     # Public data only
     fav_rows = conn.execute("""

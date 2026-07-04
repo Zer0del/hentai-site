@@ -1,119 +1,148 @@
 {% extends "base.html" %}
 
-{% block title %}Профиль • FAKKU{% endblock %}
+{% block title %}Профиль • Hentach{% endblock %}
 
 {% block content %}
 <div class="max-w-screen-2xl mx-auto px-6 py-8">
-    <!-- User Header -->
-    <div class="flex items-center gap-x-4 mb-8">
-        {% if user and user.get('avatar') %}
-        <img src="/uploads/avatars/{{ user.avatar }}" class="w-16 h-16 rounded-full object-cover border border-white/10" onerror="this.src='https://picsum.photos/id/1011/64/64'">
-        {% else %}
-        <div class="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center text-3xl border border-white/10">👤</div>
-        {% endif %}
-        <div>
-            <h1 class="text-3xl font-semibold" style="color: {{ user.get('username_color') or '#e11d48' }}">
-                {{ user.username }}
-                {% if user.get('is_premium') %}
-                <span class="text-xs ml-2 px-3 py-0.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-black rounded-full font-medium">PREMIUM</span>
-                {% endif %}
-            </h1>
-            <div class="text-white/50 text-sm mt-1">
-                Избранное: <span class="text-white">{{ favorites|length }}</span> • 
-                Оценок: <span class="text-white">{{ my_ratings|length }}</span> • 
-                Прочитано: <span class="text-white">{{ history|length }}</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Избранное -->
-    <div class="mb-8">
-        <div class="flex items-center justify-between mb-3">
-            <h2 class="text-xl font-semibold">Избранное</h2>
-            {% if favorites|length > 12 %}
-            <span class="text-xs text-white/50">Показано 12 из {{ favorites|length }}</span>
+    <!-- Atmospheric personal header -->
+    <div class="relative mb-8 rounded-3xl border border-white/10 bg-gradient-to-br from-[#111] via-[#0a0a0a] to-black p-6 md:p-8 overflow-hidden">
+        <div class="flex flex-col md:flex-row items-start md:items-center gap-5">
+            <!-- Big avatar -->
+            {% if user and user.get('avatar') %}
+            <img src="/uploads/avatars/{{ user.avatar }}" class="w-20 h-20 md:w-24 md:h-24 rounded-2xl object-cover border border-white/15 shadow-xl" onerror="this.src='https://picsum.photos/id/1011/96/96'">
+            {% else %}
+            <div class="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-white/10 flex items-center justify-center text-4xl border border-white/15">👤</div>
             {% endif %}
-        </div>
-        {% if favorites %}
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-            {% for m in favorites[:12] %}
-            <a href="/manga/{{ m.slug }}" class="block group">
-                <div class="fakku-card rounded-2xl overflow-hidden border border-white/5">
-                    <img src="{{ m.cover }}" class="manga-cover w-full" onerror="this.src='https://picsum.photos/id/1011/300/400'">
-                    <div class="px-2 py-2">
-                        <div class="font-semibold text-sm truncate group-hover:text-[#e11d48]">{{ m.title }}</div>
-                        {% if m.author %}<div class="text-[10px] text-white/50 truncate">{{ m.author }}</div>{% endif %}
+
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-x-3 flex-wrap">
+                    <h1 class="text-4xl md:text-5xl font-semibold tracking-tighter" style="color: {{ user.get('username_color') or '#e11d48' }}">
+                        {{ user.username }}
+                    </h1>
+                    {% if user.get('is_premium') %}
+                    <span class="text-xs px-3.5 py-1 rounded-full bg-gradient-to-r from-amber-300 to-yellow-400 text-black font-semibold tracking-wider">PREMIUM</span>
+                    {% endif %}
+                </div>
+
+                <!-- Quick stats cards -->
+                <div class="flex flex-wrap gap-2 mt-3">
+                    <div class="px-3.5 py-1.5 bg-white/5 border border-white/10 rounded-2xl text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-heart text-[#e11d48]"></i>
+                        <span class="font-medium">{{ favorites|length }}</span> <span class="text-white/50 text-xs">избранное</span>
+                    </div>
+                    <div class="px-3.5 py-1.5 bg-white/5 border border-white/10 rounded-2xl text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-star text-amber-400"></i>
+                        <span class="font-medium">{{ my_ratings|length }}</span> <span class="text-white/50 text-xs">оценок</span>
+                    </div>
+                    <div class="px-3.5 py-1.5 bg-white/5 border border-white/10 rounded-2xl text-sm flex items-center gap-1.5">
+                        <i class="fa-solid fa-book text-emerald-400"></i>
+                        <span class="font-medium">{{ history|length }}</span> <span class="text-white/50 text-xs">прочитано</span>
                     </div>
                 </div>
-            </a>
-            {% endfor %}
+            </div>
         </div>
-        {% else %}
-        <p class="text-white/40 text-sm">Нет избранного. Добавляйте на страницах манги.</p>
-        {% endif %}
+
+        <!-- Reading progress -->
+        {% set read_count = history|length %}
+        {% set progress_pct = (read_count * 7) % 85 + 12 if read_count > 0 else 8 %}
+        <div class="mt-5">
+            <div class="flex justify-between text-xs text-white/50 mb-1 px-0.5">
+                <div>Прогресс вашей библиотеки</div>
+                <div class="font-mono">{{ progress_pct }}%</div>
+            </div>
+            <div class="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-[#e11d48] to-rose-400 rounded-full transition-all" style="width: {{ progress_pct }}%"></div>
+            </div>
+            <div class="text-[10px] text-white/40 mt-1">Продолжайте открывать новые истории • {{ read_count }} в истории</div>
+        </div>
     </div>
 
-    <!-- История чтения (компактно) -->
-    <div class="mb-8">
-        <h2 class="text-xl font-semibold mb-3">История чтения (последние)</h2>
+    <!-- История чтения - красивые карточки -->
+    <div class="mb-9" id="history">
+        <div class="flex items-baseline justify-between mb-3 px-1">
+            <h2 class="text-lg font-semibold tracking-tight">История чтения</h2>
+            {% if not show_full_history and history|length > 12 %}
+            <span class="text-xs text-white/40">Последние 12 из {{ history|length }}</span>
+            {% elif show_full_history %}
+            <span class="text-xs text-white/40">Всего {{ history|length }}</span>
+            {% endif %}
+        </div>
         {% if history %}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {% for h in history[:10] %}
-            <a href="/manga/{{ h.slug }}" class="flex gap-3 bg-[#111] rounded-2xl p-2 border border-white/5 hover:border-white/10 transition">
-                <img src="{{ h.cover }}" class="w-12 h-16 object-cover rounded" onerror="this.src='https://picsum.photos/id/1011/48/64'">
-                <div class="flex-1 min-w-0">
-                    <div class="font-medium text-sm truncate">{{ h.title }}</div>
-                    <div class="text-xs text-white/50">{{ h.author or '' }}</div>
-                    <div class="text-xs mt-1">
-                        {% if h.completed %}<span class="text-emerald-400">✓ Прочитано</span>{% else %}Стр. {{ h.last_page }}{% endif %}
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {% set shown = history if show_full_history else history[:12] %}
+            {% for h in shown %}
+            <a href="/read/{{ h.slug }}{% if not h.completed %}?page={{ h.last_page or 1 }}{% endif %}" class="group block fakku-card rounded-2xl overflow-hidden border border-white/5 hover:border-white/15">
+                <div class="relative">
+                    <img src="{{ h.cover }}" class="w-full aspect-[3/4] object-cover" onerror="this.src='https://picsum.photos/id/1011/300/400'">
+                    {% if not h.completed %}
+                    <div class="absolute bottom-1.5 right-1.5 text-[10px] px-1.5 py-px bg-black/70 rounded text-emerald-300 font-mono">стр. {{ h.last_page }}</div>
+                    {% endif %}
+                </div>
+                <div class="p-2.5">
+                    <div class="text-sm font-medium truncate group-hover:text-[#e11d48]">{{ h.title }}</div>
+                    {% if h.author %}<div class="text-[10px] text-white/40">{{ h.author }}</div>{% endif %}
+                    <div class="mt-1 flex items-center justify-between text-[10px]">
+                        {% if h.completed %}
+                        <span class="text-emerald-400">✓ Завершено</span>
+                        {% else %}
+                        <span class="text-white/50">Продолжить →</span>
+                        {% endif %}
+                        {% if h.last_read or h.added_at %}
+                        <span class="text-white/30 font-mono">{{ (h.last_read or h.added_at)[:10] if (h.last_read or h.added_at) else '' }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% if not show_full_history and history|length > 12 %}
+        <div class="mt-4 text-center">
+            <a href="?show_full_history=1#history" class="inline-block px-4 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10">Показать всю историю ({{ history|length }})</a>
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-white/40 text-sm px-1">История пуста. Начните читать!</p>
+        {% endif %}
+    </div>
+
+    <!-- Мои оценки - визуально -->
+    <div class="mb-9">
+        <h2 class="text-lg font-semibold tracking-tight mb-3 px-1">Мои оценки</h2>
+        {% if my_ratings %}
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+            {% for r in my_ratings[:12] %}
+            <a href="/manga/{{ r.slug }}" class="flex items-center gap-2 bg-[#111] hover:bg-white/5 border border-white/5 rounded-2xl p-1.5 pr-2.5 transition group">
+                <img src="{{ r.cover or 'https://picsum.photos/id/1011/60/80' }}" class="w-9 h-12 object-cover rounded-xl" onerror="this.src='https://picsum.photos/id/1011/60/80'">
+                <div class="min-w-0 flex-1">
+                    <div class="text-xs font-medium truncate">{{ r.title }}</div>
+                    <div class="text-amber-400 text-sm mt-0.5 flex items-center gap-0.5">
+                        {% for _ in range( (r.score // 2) | int ) %}<i class="fa-solid fa-star text-[10px]"></i>{% endfor %}
+                        <span class="font-mono text-xs ml-0.5">{{ r.score }}</span>
                     </div>
                 </div>
             </a>
             {% endfor %}
         </div>
         {% else %}
-        <p class="text-white/40 text-sm">История пуста.</p>
+        <p class="text-white/40 text-sm px-1">Вы ещё не ставили оценки.</p>
         {% endif %}
     </div>
 
-    <!-- Оценки и предпочтения в ряд -->
-    <div class="grid md:grid-cols-2 gap-8">
-        <!-- Мои оценки -->
-        <div>
-            <h2 class="text-xl font-semibold mb-3">Мои оценки</h2>
-            {% if my_ratings %}
-            <div class="space-y-1 text-sm max-h-80 overflow-auto pr-1">
-                {% for r in my_ratings[:15] %}
-                <a href="/manga/{{ r.slug }}" class="flex justify-between items-center bg-[#111] hover:bg-white/5 px-3 py-2 rounded-xl transition">
-                    <span class="truncate">{{ r.title }}</span>
-                    <span class="text-[#f59e0b] ml-2 flex-shrink-0">{{ r.score }} ★</span>
-                </a>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="text-white/40 text-sm">Вы ещё не ставили оценки.</p>
-            {% endif %}
+    <!-- Предпочтения по тегам - облако / размерные бейджи -->
+    <div class="mb-8">
+        <h2 class="text-lg font-semibold tracking-tight mb-2 px-1">Предпочтения по тегам</h2>
+        {% if tag_weights %}
+        <div class="flex flex-wrap gap-1.5 p-3 bg-[#0a0a0a] border border-white/10 rounded-3xl">
+            {% for tag, w in tag_weights %}
+            <span class="px-3 py-0.5 text-sm rounded-full border {{ 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' if w > 0 else 'border-red-500/30 bg-red-500/10 text-red-300' if w < 0 else 'border-white/10 bg-white/5' }}">
+                {{ tag }} <span class="opacity-60 font-mono text-[9px]">{{ w }}</span>
+            </span>
+            {% endfor %}
         </div>
-
-        <!-- Веса тегов -->
-        <div>
-            <h2 class="text-xl font-semibold mb-3">Предпочтения по тегам</h2>
-            {% if tag_weights %}
-            <div class="text-sm bg-[#111] rounded-2xl p-4 max-h-80 overflow-auto">
-                {% for tag, w in tag_weights %}
-                <div class="flex justify-between py-0.5 border-b border-white/5 last:border-0">
-                    <span class="truncate">{{ tag }}</span>
-                    <span class="font-mono ml-2 {{ 'text-emerald-400' if w > 0 else 'text-red-400' if w < 0 else 'text-white/50' }}">
-                        {{ w }}
-                    </span>
-                </div>
-                {% endfor %}
-            </div>
-            <p class="text-xs text-white/40 mt-1">Положительные — любимые теги (обновляется после оценок и избранного).</p>
-            {% else %}
-            <p class="text-white/40 text-sm">Поставьте оценки или добавьте в избранное.</p>
-            {% endif %}
-        </div>
+        <p class="text-[10px] text-white/40 mt-1.5 px-1">Цвет и наличие отражают предпочтения (обновляется по оценкам и избранному).</p>
+        {% else %}
+        <p class="text-white/40 text-sm px-1">Поставьте оценки или добавьте в избранное, чтобы увидеть облако тегов.</p>
+        {% endif %}
     </div>
 
     {% if not user.get('is_premium') %}

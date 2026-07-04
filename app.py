@@ -1,9 +1,24 @@
 #!/usr/bin/env python3
 """
-FAKKU-like Hentai Manga Reader
+Hentach - Hentai Manga Reader
 Admin can add manga. High quality reader.
 Uses Flask + SQLite + Tailwind CDN + vanilla JS
 """
+
+# Friendly check for common missing dependencies (especially on first run / Windows)
+try:
+    import flask
+    from werkzeug.utils import secure_filename
+except ImportError as _dep_err:
+    print("\n" + "="*60)
+    print("ERROR: Required Python packages are not installed.")
+    print("Missing:", _dep_err)
+    print("\nPlease run the 'run.bat' file (it will install them automatically).")
+    print("Or run manually in this folder:")
+    print("    python -m pip install -r requirements.txt")
+    print("="*60 + "\n")
+    input("Press Enter to exit...")
+    raise SystemExit(1)
 
 import os
 import re
@@ -16,7 +31,6 @@ import random
 import time
 import logging
 import threading
-import requests
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -127,7 +141,7 @@ def _get_secret_key():
             f.write(key)
         return key
 
-ADMIN_PASS = os.environ.get("FAKKU_ADMIN_PASS", "admin123")
+ADMIN_PASS = os.environ.get("HENTACH_ADMIN_PASS", os.environ.get("FAKKU_ADMIN_PASS", "admin123"))
 
 # IP whitelist for site access during development.
 # Only these IPs can access the site (including login).
@@ -695,6 +709,7 @@ def _bulk_import_worker():
             items = list(_bulk_state["items"])  # snapshot reference
             _bulk_stop_requested = False
 
+        import requests
         sess = requests.Session()
 
         # Login using the same admin demo user as the CLI bulk script.
@@ -1843,7 +1858,7 @@ if __name__ == "__main__":
     init_db()
     # seed_demo_if_empty()  -- disabled for production
     import os
-    print("FAKKU-like Hentai Manga Reader starting (modular split structure)...")
+    print("Hentach - Hentai Manga Reader starting (modular split structure)...")
     print(f"PID: {os.getpid()}")
     print(f"Admin password: {ADMIN_PASS}")
     print(f"DB: {DB_PATH} (WAL + indexes enabled)")

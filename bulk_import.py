@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bulk import script for FAKKU-like manga site.
+Bulk import script for Hentach manga site.
 Walks author/manga structure and uploads via /api/add_manga.
 
 The scan folder is shared with the web UI (/admin/bulk):

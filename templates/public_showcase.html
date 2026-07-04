@@ -4,6 +4,14 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto px-6 py-10">
+    {% if profile_user.hidden %}
+    <div class="text-center py-12">
+        <div class="text-5xl mb-4 opacity-50">🙈</div>
+        <h1 class="text-2xl font-semibold mb-2">{{ profile_user.username }}</h1>
+        <p class="text-white/60">Пользователь скрыл свою публичную карточку профиля.</p>
+        <a href="/" class="inline-block mt-6 text-sm text-white/50 hover:text-white">← На главную</a>
+    </div>
+    {% else %}
     <div class="flex items-center gap-4 mb-8">
         {% if profile_user.avatar %}
         <img src="/uploads/avatars/{{ profile_user.avatar }}" class="w-16 h-16 rounded-full object-cover border border-white/10">
@@ -68,5 +76,6 @@
     <div class="mt-10 text-center">
         <a href="/" class="text-sm text-white/50 hover:text-white">← На главную</a>
     </div>
+    {% endif %}
 </div>
 {% endblock %}

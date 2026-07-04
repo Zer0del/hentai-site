@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}FAKKU{% endblock %}</title>
+    <title>{% block title %}Hentach{% endblock %}</title>
     <!-- Tailwind CDN for dev. For prod consider building with CLI to avoid warnings and faster load. --> 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -106,17 +106,56 @@
             font-variant-numeric: tabular-nums;
         }
 
+        /* Nice global pagination */
+        .page-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+        .page-nav .nav-arrow {
+            padding: 4px 10px;
+            border-radius: 9999px;
+            background: rgba(255,255,255,0.06);
+            transition: all .1s;
+        }
+        .page-nav .nav-arrow:hover {
+            background: rgba(255,255,255,0.12);
+            transform: translateY(-1px);
+        }
+        .page-nav .page-num {
+            padding: 2px 10px;
+            border-radius: 9999px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            cursor: pointer;
+            min-width: 2.2em;
+            text-align: center;
+            transition: all .1s;
+            font-variant-numeric: tabular-nums;
+        }
+        .page-nav .page-num:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .page-nav .page-num:active {
+            transform: scale(0.96);
+        }
+
         .fakku-accent {
             color: #e11d48;
         }
 
         .fakku-btn {
-            background-color: #e11d48;
-            transition: background-color .1s ease;
+            background-color: #222;
+            color: #eee;
+            border: 1px solid rgba(255,255,255,0.12);
+            transition: all .1s ease;
         }
         
         .fakku-btn:hover {
-            background-color: #be123c;
+            background-color: #2a2a2a;
+            transform: translateY(-1px);
         }
 
         .grid-manga {
@@ -165,9 +204,9 @@
                     <!-- Logo -->
                     <a href="/" class="flex items-center gap-x-2 group">
                         <div class="w-8 h-8 bg-[#e11d48] flex items-center justify-center rounded">
-                            <span class="text-white text-2xl font-black tracking-tighter">F</span>
+                            <span class="text-white text-2xl font-black tracking-tighter">H</span>
                         </div>
-                        <span class="logo-font text-3xl font-bold tracking-[-1.5px] group-hover:text-[#e11d48] transition-colors">FAKKU</span>
+                        <span class="logo-font text-3xl font-bold tracking-[-1.5px] group-hover:text-[#e11d48] transition-colors">Hentach</span>
                     </a>
                     
                     <!-- Nav links -->
@@ -236,7 +275,7 @@
     {% block content %}{% endblock %}
 
     <footer class="border-t border-white/10 py-8 mt-12 text-center text-white/40 text-xs">
-        <div>FAKKU Reader • Локальная библиотека хентай манги • Только для личного использования</div>
+        <div>Hentach • Локальная библиотека хентай манги • Только для личного использования</div>
     </footer>
 
     <script>
@@ -280,6 +319,48 @@
             // small delay for any late images
             setTimeout(initSmoothImages, 100);
         });
+
+        // Global nice page input for clean paginations: click N to edit
+        // base param optional; if omitted uses current URL + page= param (safe)
+        window.openPageInput = function(el, current, total, base) {
+            const rect = el.getBoundingClientRect();
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = 1;
+            input.max = total;
+            input.value = current;
+            input.className = 'absolute z-[999] w-14 text-center bg-[#111] border border-white/30 rounded-lg py-0.5 text-sm outline-none shadow-lg';
+            input.style.left = (rect.left + window.scrollX) + 'px';
+            input.style.top = (rect.top + window.scrollY - 2) + 'px';
+            input.style.height = rect.height + 'px';
+
+            document.body.appendChild(input);
+            input.focus();
+            input.select();
+
+            function go(val) {
+                const p = Math.max(1, Math.min(total, parseInt(val) || current));
+                if (p !== current) {
+                    if (base) {
+                        window.location = base + p;
+                    } else {
+                        // safe: modify current URL's page param
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('page', p);
+                        window.location = url.toString();
+                    }
+                }
+                input.remove();
+            }
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') go(input.value);
+                if (e.key === 'Escape') input.remove();
+            });
+            input.addEventListener('blur', () => {
+                setTimeout(() => { if (input.parentNode) input.remove(); }, 80);
+            });
+        };
     </script>
     {% block scripts %}{% endblock %}
 </body>

@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 
-{% block title %}Поиск • FAKKU{% endblock %}
+{% block title %}Поиск • Hentach{% endblock %}
+
+{% block head %}
+<style>
+    @keyframes resultFade {
+        from { opacity: 0; transform: translateY(6px) scale(0.985); }
+        to { opacity: 1; transform: none; }
+    }
+    .result-card {
+        animation: resultFade 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+    .result-card:nth-child(3n) { animation-delay: 40ms; }
+    .result-card:nth-child(3n+1) { animation-delay: 80ms; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-16">
@@ -59,9 +73,7 @@
             </div>
             {% endif %}
 
-            <div class="md:col-span-2 flex items-end">
-                <button type="submit" class="w-full py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-sm transition">Применить фильтры</button>
-            </div>
+            <!-- Filters apply live via JS - no button needed -->
         </div>
 
         <!-- Multi-tag selector - the highlight of the page -->
@@ -98,7 +110,6 @@
     </form>
 
     <!-- Results (live updated) -->
-    <div id="results-container">
     <div class="mb-3 flex items-baseline justify-between px-1">
         <div class="text-lg font-semibold tracking-tight">
             Результаты <span class="text-white/40 text-base font-normal">({{ results|length }})</span>
@@ -111,7 +122,7 @@
     {% if results %}
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
         {% for m in results %}
-        <a href="/manga/{{ m.slug }}" class="block group">
+        <a href="/manga/{{ m.slug }}" class="block group result-card">
             <div class="fakku-card rounded-2xl overflow-hidden border border-white/5 bg-[#111] transition-all duration-200 group-hover:border-white/20">
                 <div class="relative">
                     <img src="{{ m.cover }}" 
@@ -162,15 +173,18 @@
     </div>
     {% endif %}
 
-    <!-- Search pagination -->
+    <!-- Search pagination: clean arrows + clickable num -->
     {% if total_search_pages and total_search_pages > 1 %}
-    <div class="flex justify-center gap-2 mt-6 text-sm">
+    <div class="flex justify-center items-center gap-1.5 mt-6 text-sm page-nav">
         {% if search_page > 1 %}
-        <a href="?q={{ q }}&sort={{ sort }}&min_rating={{ min_rating }}&page={{ search_page - 1 }}{% for t in selected_tags %}&tag={{ t }}{% endfor %}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">← Назад</a>
+        <a href="?q={{ q }}&sort={{ sort }}&min_rating={{ min_rating }}{% if unread_only %}&unread=1{% endif %}&page={{ search_page - 1 }}{% for t in selected_tags %}&tag={{ t }}{% endfor %}" class="nav-arrow">←</a>
         {% endif %}
-        <span class="text-white/50 px-2">Страница {{ search_page }} / {{ total_search_pages }}</span>
+
+        <span class="page-num" onclick="openPageInput(this, {{ search_page }}, {{ total_search_pages }})">{{ search_page }}</span>
+        <span class="text-white/40">/ {{ total_search_pages }}</span>
+
         {% if search_page < total_search_pages %}
-        <a href="?q={{ q }}&sort={{ sort }}&min_rating={{ min_rating }}&page={{ search_page + 1 }}{% for t in selected_tags %}&tag={{ t }}{% endfor %}" class="px-3 py-1 rounded-full bg-white/5 hover:bg-white/10">Вперёд →</a>
+        <a href="?q={{ q }}&sort={{ sort }}&min_rating={{ min_rating }}{% if unread_only %}&unread=1{% endif %}&page={{ search_page + 1 }}{% for t in selected_tags %}&tag={{ t }}{% endfor %}" class="nav-arrow">→</a>
         {% endif %}
     </div>
     {% endif %}

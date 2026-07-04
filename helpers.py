@@ -348,6 +348,12 @@ def update_user_history(user_id, manga_id, last_page, completed=False):
     conn.commit()
     conn.close()
 
+    if completed:
+        # Invalidate recommendations + tag weights cache so finished manga disappears from recs/home immediately
+        for k in list(_cache.keys()):
+            if str(k).startswith(f"recs:{user_id}") or str(k).startswith(f"tag_weights:{user_id}"):
+                _cache.pop(k, None)
+
 
 # Recommendations and cache
 _cache = {}

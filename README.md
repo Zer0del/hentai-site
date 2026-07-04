@@ -1,10 +1,10 @@
-# FAKKU-like Hentai Manga Reader
+# Hentach - Hentai Manga Reader
 
-Полнофункциональный сайт для чтения хентай-манги в стиле **FAKKU**.
+Полнофункциональный сайт для чтения хентай-манги (Hentach).
 
 ## Возможности
 
-- **Главная страница** с красивой сеткой обложек (Fakku стиль)
+- **Главная страница** с красивой сеткой обложек
 - **Страница манги**: большая обложка, теги, рейтинг 1-5, описание, кнопка Читать
 - **Высококачественная читалка**:
   - Навигация клавишами (стрелки, A/D, пробел)
@@ -119,7 +119,7 @@ For deployment on VPS (like the hentach.ru setup):
 3. Important: the 413 error on /api/add_manga means your reverse proxy (Nginx) has a low upload limit. Use the included `nginx.conf`.
 
 4. Set env vars:
-   - FAKKU_ADMIN_PASS=yoursecret
+   - HENTACH_ADMIN_PASS=secret (or FAKKU_ADMIN_PASS for compat)
    - ALLOWED_IPS= (if using IP whitelist, but removed)
 
 5. For large uploads, make sure disk space and memory are sufficient. Use ZIP for many pages.
@@ -138,7 +138,7 @@ The Tailwind CDN warning is harmless for this project (it's dev convenience); fo
 
 ## Стиль
 
-Сайт выполнен в стиле оригинального **FAKKU**:
+Сайт для личной библиотеки:
 - Тёмная тема
 - Акцентный цвет #e11d48 (розово-красный)
 - Чистые карточки с хорошими hover-эффектами

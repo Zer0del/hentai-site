@@ -1,67 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}{{ manga.title }} • FAKKU{% endblock %}
+{% block title %}{{ manga.title }} • Hentach{% endblock %}
 
 {% block content %}
 <div class="max-w-screen-2xl mx-auto px-5 pt-8 pb-16">
-    <div class="flex flex-col lg:flex-row gap-9">
+    <div class="flex flex-col lg:flex-row gap-8 lg:gap-10">
         
-        <!-- Cover -->
-        <div class="lg:w-[360px] flex-shrink-0 relative z-10">
-            <div class="rounded-3xl overflow-hidden border border-white/10 shadow-xl">
+        <!-- Cover (left column ONLY) -->
+        <div class="lg:w-[340px] flex-shrink-0">
+            <div class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
                 <img src="{{ manga.cover }}" 
                      alt="{{ manga.title }}"
                      class="manga-cover w-full aspect-[3/4] object-cover"
                      onerror="this.src='https://picsum.photos/id/1011/300/400'">
             </div>
-            
-            <!-- Quick actions -->
-            <div class="mt-8 flex flex-wrap gap-3 bg-zinc-900 rounded-xl p-2">
-                <a href="/read/{{ manga.slug }}" 
-                   class="flex-1 fakku-btn flex items-center justify-center gap-x-3 rounded-2xl py-4 font-semibold text-base cursor-pointer">
-                    <i class="fa-solid fa-book-open"></i>
-                    <span>Читать мангу</span>
-                </a>
-
-                {% if current_user %}
-                <button onclick="toggleFavorite({{ manga.id }})"
-                        class="px-4 flex items-center gap-x-2 rounded-2xl border text-sm font-medium cursor-pointer {{ 'bg-[#e11d48] text-white border-[#e11d48]' if manga.is_favorite else 'bg-white/5 hover:bg-white/10 border-white/10' }}"
-                        id="fav-btn">
-                    <i class="fa-solid fa-heart"></i>
-                    <span class="hidden sm:inline">Избранное</span>
-                </button>
-
-                <button id="read-btn" onclick="toggleReadStatus({{ manga.id }}, {{ 1 if manga.is_read else 0 }})"
-                        class="px-4 flex items-center gap-x-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium cursor-pointer">
-                    <i class="fa-solid fa-check"></i>
-                    <span class="hidden sm:inline">{{ 'Отметить непрочитанной' if manga.is_read else 'Отметить прочитанной' }}</span>
-                </button>
-                {% endif %}
-
-                {% if current_user and current_user.get('is_premium') %}
-                <a href="/download/{{ manga.slug }}" 
-                   class="px-4 flex items-center gap-x-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-sm font-medium cursor-pointer">
-                    <i class="fa-solid fa-download"></i>
-                    <span class="hidden sm:inline">Скачать</span>
-                </a>
-                {% endif %}
-            </div>
-
-            {% if current_user and current_user.get('is_admin') %}
-            <!-- Admin edit button - dedicated to ensure it has its own hit area in the left column -->
-            <div class="mt-2 flex justify-end select-none">
-                <button onclick="showEditModal()"
-                        class="px-5 py-1.5 flex items-center gap-x-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium cursor-pointer relative z-30 pointer-events-auto"
-                        title="Редактировать (админ)">
-                    <i class="fa-solid fa-edit"></i>
-                    <span class="hidden sm:inline">Править</span>
-                </button>
-            </div>
-            {% endif %}
         </div>
 
-        <!-- Meta -->
-        <div class="flex-1 min-w-0">
+        <!-- Info + actions (right column) -->
+        <div class="flex-1 min-w-0 pt-1">
             <div class="mb-1">
                 <div class="uppercase tracking-[2.5px] text-[10px] text-[#e11d48] font-semibold">ХЕНТАЙ МАНГА</div>
             </div>
@@ -71,7 +27,47 @@
             {% if manga.author %}
             <div class="text-sm text-white/60 mb-4">Автор: <a href="/?q={{ manga.author | urlencode }}" class="text-white font-medium hover:text-[#e11d48]">{{ manga.author }}</a></div>
             {% endif %}
-            
+
+            <!-- Actions row (soft, muted redesign) -->
+            <div class="flex flex-wrap items-center gap-2.5 mb-6">
+                <a href="/read/{{ manga.slug }}" 
+                   class="inline-flex items-center gap-x-2.5 px-5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-sm font-semibold transition active:scale-[0.985]">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>Читать мангу</span>
+                </a>
+
+                {% if current_user %}
+                <button onclick="toggleFavorite({{ manga.id }})"
+                        class="inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl border text-sm font-medium transition {{ 'bg-white/10 text-white border-white/20' if manga.is_favorite else 'bg-white/5 hover:bg-white/10 border-white/10' }}"
+                        id="fav-btn">
+                    <i class="fa-solid fa-heart"></i>
+                    <span class="hidden sm:inline">Избранное</span>
+                </button>
+
+                <button id="read-btn" onclick="toggleReadStatus({{ manga.id }}, {{ 1 if manga.is_read else 0 }})"
+                        class="inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium transition">
+                    <i class="fa-solid fa-check"></i>
+                    <span class="hidden sm:inline">{{ 'Отметить непрочитанной' if manga.is_read else 'Отметить прочитанной' }}</span>
+                </button>
+                {% endif %}
+
+                {% if current_user and current_user.get('is_premium') %}
+                <a href="/download/{{ manga.slug }}" 
+                   class="inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl bg-emerald-900/60 hover:bg-emerald-900/80 border border-emerald-800/50 text-sm font-medium transition">
+                    <i class="fa-solid fa-download"></i>
+                    <span class="hidden sm:inline">Скачать</span>
+                </a>
+                {% endif %}
+
+                {% if current_user and current_user.get('is_admin') %}
+                <button onclick="showEditModal()"
+                        class="ml-auto inline-flex items-center gap-x-1.5 px-3 py-1.5 text-xs rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70">
+                    <i class="fa-solid fa-edit"></i>
+                    <span>Править</span>
+                </button>
+                {% endif %}
+            </div>
+
             <!-- Stats -->
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm mb-6">
                 <div class="flex items-center gap-x-2">
@@ -171,29 +167,31 @@
 
         {% if current_user %}
         <form id="comment-form" class="mb-6">
-            <textarea id="comment-text" class="w-full bg-zinc-900 border border-white/10 rounded-2xl p-3 text-sm resize-y min-h-[80px]" placeholder="Напишите комментарий..." required></textarea>
-            <button type="submit" class="mt-2 px-4 py-2 bg-[#e11d48] hover:bg-[#be123c] rounded-xl text-sm font-medium">Отправить</button>
+            <textarea id="comment-text" class="w-full bg-[#0a0a0a] border border-white/20 focus:border-white/40 rounded-2xl p-3 text-sm resize-y min-h-[80px] placeholder:text-white/30" placeholder="Напишите комментарий..." required></textarea>
+            <button type="submit" class="mt-2 px-4 py-2 rounded-2xl text-sm font-medium bg-white/10 hover:bg-white/15 border border-white/15 transition">Отправить</button>
         </form>
         {% else %}
         <p class="text-sm text-white/50 mb-4">Войдите, чтобы оставить комментарий.</p>
         {% endif %}
 
-        <div id="comments-list" class="space-y-4">
+        <div id="comments-list" class="space-y-3">
             {% for c in comments %}
-            <div class="bg-[#111] rounded-2xl p-4 border border-white/5" data-comment-id="{{ c.id }}">
-                <div class="flex items-center gap-2 mb-2">
+            <div class="group bg-[#0f0f0f] rounded-2xl p-3.5 border border-white/10 hover:border-white/15 transition" data-comment-id="{{ c.id }}">
+                <div class="flex items-center gap-2 mb-1.5">
                     {% if c.avatar %}
-                    <img src="/uploads/avatars/{{ c.avatar }}" class="w-6 h-6 rounded-full object-cover" onerror="this.src='https://picsum.photos/id/1011/24/24'">
+                    <img src="/uploads/avatars/{{ c.avatar }}" class="w-5 h-5 rounded-full object-cover" onerror="this.src='https://picsum.photos/id/1011/20/20'">
                     {% endif %}
                     <a href="/u/{{ c.username }}" style="color: {{ c.username_color or '#e11d48' }}" class="font-medium text-sm hover:underline">{{ c.username }}</a>
-                    <span class="text-[10px] text-white/40">{{ c.created_at[:16] if c.created_at else '' }}</span>
+                    <span class="text-[10px] text-white/35">{{ c.created_at[:16] if c.created_at else '' }}</span>
                     {% if current_user and (current_user.get('is_admin') or current_user.get('id') == c.user_id) %}
-                    <button onclick="deleteComment({{ c.id }})" class="ml-auto text-xs px-2 py-0.5 bg-red-900/40 hover:bg-red-900 text-red-400 rounded flex items-center gap-1" title="{{ 'Удалить как админ' if current_user.get('is_admin') else 'Удалить свой комментарий' }}">
-                        <i class="fa-solid fa-trash"></i> <span>Удалить</span>
+                    <button onclick="deleteComment({{ c.id }})" 
+                            class="ml-auto opacity-0 group-hover:opacity-100 transition text-xs px-2 py-0.5 border border-white/20 hover:border-red-500/40 text-white/50 hover:text-red-400 rounded flex items-center gap-1"
+                            title="{{ 'Удалить как админ' if current_user.get('is_admin') else 'Удалить свой комментарий' }}">
+                        <i class="fa-solid fa-trash text-[10px]"></i> <span class="text-[10px]">Удалить</span>
                     </button>
                     {% endif %}
                 </div>
-                <p class="text-sm text-white/90 whitespace-pre-wrap">{{ c.content }}</p>
+                <p class="text-sm text-white/85 whitespace-pre-wrap">{{ c.content }}</p>
             </div>
             {% endfor %}
             {% if not comments %}
