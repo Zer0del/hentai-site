@@ -283,26 +283,32 @@ async function doMassImport(e) {
         const j = await r.json();
         if (r.ok && j.ok) {
             status.innerHTML = `<span class="text-emerald-400">${j.message || 'Импорт запущен в фоне...'}</span>`;
-            // start polling
+            // start polling - resilient, show real progress, no forced immediate done/reload (bg add kept)
             if (massPollInterval) clearInterval(massPollInterval);
+            let pollAttempts = 0;
+            let hasSeenRunning = false;
             massPollInterval = setInterval(async () => {
                 try {
+                    pollAttempts++;
                     const sr = await fetch('/api/mass_import/status');
                     const sj = await sr.json();
+                    if (sj.running) hasSeenRunning = true;
                     if (sj.total > 0) {
                         const pct = Math.min(100, Math.floor((sj.done / sj.total) * 100));
                         progBar.style.width = pct + '%';
-                        progText.textContent = `${sj.done} / ${sj.total} - ${sj.current || ''}`;
+                        progText.textContent = `${sj.done} / ${sj.total} - ${sj.current || ''} (добавлено ${sj.added || 0})`;
                     } else {
-                        progText.textContent = sj.current || 'Обработка...';
+                        progText.textContent = (sj.current || 'Сканируем папки...') + (sj.added ? ` (добавлено ${sj.added})` : '');
                     }
-                    if (!sj.running) {
+                    if (!sj.running && (hasSeenRunning || pollAttempts > 3)) {
                         clearInterval(massPollInterval);
-                        status.innerHTML = `<span class="text-emerald-400">Готово! Добавлено: ${sj.added}. Обновите страницу.</span>`;
-                        setTimeout(() => location.reload(), 2000);
+                        const finalAdded = sj.added || 0;
+                        status.innerHTML = `<span class="text-emerald-400">Готово! Добавлено: ${finalAdded}. Добавление происходило в фоне. Обновите страницу, чтобы увидеть в списке.</span>`;
+                        progBar.style.width = '100%';
+                        // no auto-reload to allow staying / watching; user can refresh when ready
                     }
                 } catch(e) {}
-            }, 500);
+            }, 600);
         } else {
             status.innerHTML = `<span class="text-red-400">${j.error || 'Ошибка'}</span>`;
             progContainer.classList.add('hidden');

@@ -13,7 +13,7 @@
             <h2 class="section-head text-xl font-semibold tracking-tight text-white">Рекомендации для вас</h2>
             <a href="/recommendations" class="text-xs px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition flex items-center gap-1">Все рекомендации <span class="text-[10px]">→</span></a>
         </div>
-        <div class="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-white/20 -mx-1 px-1">
+        <div class="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin scrollbar-thumb-white/20">
             {% for m in recommendations %}
             <a href="/manga/{{ m.id }}" class="block group w-40 sm:w-44 flex-shrink-0 snap-start">
                 <div class="rounded-2xl overflow-hidden border border-white/10 bg-[#111] shadow-lg modern-card group-hover:shadow-xl group-hover:-translate-y-[1px]">
@@ -21,8 +21,8 @@
                         <img src="{{ m.cover }}" class="manga-cover w-full aspect-[3/4] object-cover transition duration-200 group-hover:scale-[1.02]" loading="lazy" onerror="this.src='https://picsum.photos/id/1011/300/400'">
                         {% set r = m.rating or m.avg_rating or 0 %}
                         {% if r > 0 %}
-                        <div class="absolute top-2 left-2 text-xs px-1.5 py-px bg-black/75 backdrop-blur rounded text-white/95 flex items-center gap-px font-medium">
-                            <i class="fa-solid fa-star text-amber-400 text-[10px]"></i> <span class="ml-px font-semibold">{{ '%.1f'|format(r) }}</span>
+                        <div class="absolute top-2 left-2 text-sm px-2 py-0.5 bg-black/75 backdrop-blur rounded text-white/95 flex items-center gap-px font-medium">
+                            <i class="fa-solid fa-star text-amber-400"></i> <span class="ml-px font-semibold">{{ '%.1f'|format(r) }}</span>
                         </div>
                         {% endif %}
                     </div>
@@ -62,14 +62,14 @@
                              class="manga-cover w-full transition duration-200 group-hover:scale-[1.015]"
                              onerror="this.src='https://picsum.photos/id/1011/300/400'">
                         
-                        <div class="absolute bottom-2 right-2 bg-black/75 text-white text-[10px] font-mono px-1.5 py-px rounded">
+                        <div class="absolute bottom-2 right-2 bg-black/75 text-white text-xs font-mono px-1.5 py-px rounded">
                             {{ m.pages_count }} стр.
                         </div>
                         
                         {% if m.rating > 0 %}
-                        <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-1.5 py-px rounded text-sm text-white/90">
+                        <div class="absolute top-2 left-2 flex items-center gap-px bg-black/75 px-2 py-0.5 rounded text-sm text-white/90">
                             <i class="fa-solid fa-star text-[#f59e0b]"></i>
-                            <span class="font-semibold ml-0.5 text-[13px]">{{ '%.1f'|format(m.rating) }}</span>
+                            <span class="font-semibold ml-0.5 text-sm">{{ '%.1f'|format(m.rating) }}</span>
                         </div>
                         {% endif %}
                     </div>

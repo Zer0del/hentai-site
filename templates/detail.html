@@ -138,7 +138,7 @@
     {% if manga.pages %}
     <div class="mt-20">
         <div class="uppercase text-xs tracking-widest font-semibold text-white/50 mb-2">Страницы (кликни, чтобы открыть)</div>
-        <div id="pages-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+        <div id="pages-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
             {% for p in manga.pages %}
             {% set idx = loop.index %}
             <a href="/manga/{{ manga.id }}/{{ idx }}" class="group block preview-item {% if loop.index > 30 %}preview-hidden{% endif %}">

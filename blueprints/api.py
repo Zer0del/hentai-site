@@ -229,6 +229,11 @@ def api_mark_read():
     except Exception:
         return jsonify({"error": "bad input"}), 400
     shared['update_user_history'](user['id'], manga_id, last_page, completed)
+    try:
+        from app import invalidate_user_tag_cache
+        invalidate_user_tag_cache(user['id'])
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 @api_bp.route("/api/progress", methods=["POST"])
@@ -246,6 +251,11 @@ def api_progress():
     except Exception:
         return jsonify({"error": "bad input"}), 400
     shared['update_user_history'](user['id'], manga_id, last_page, completed)
+    try:
+        from app import invalidate_user_tag_cache
+        invalidate_user_tag_cache(user['id'])
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 @api_bp.route("/api/grant_premium", methods=["POST"])

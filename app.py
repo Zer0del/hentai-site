@@ -1002,7 +1002,7 @@ def _compute_recommendations(user_id, limit=8):
         # Cold start: популярные, исключая прочитанные/оцененные/избранные
         conn = get_db()
         read_ids = {r['manga_id'] for r in conn.execute(
-            "SELECT manga_id FROM user_history WHERE user_id=? AND completed=1", (user_id,)
+            "SELECT manga_id FROM user_history WHERE user_id=?", (user_id,)
         ).fetchall()}
         rated_ids = {r['manga_id'] for r in conn.execute(
             "SELECT manga_id FROM user_ratings WHERE user_id=?", (user_id,)
@@ -1033,7 +1033,7 @@ def _compute_recommendations(user_id, limit=8):
     # Исключаем прочитанные
     conn = get_db()
     read_ids = {r['manga_id'] for r in conn.execute(
-        "SELECT manga_id FROM user_history WHERE user_id=? AND completed=1", (user_id,)
+        "SELECT manga_id FROM user_history WHERE user_id=?", (user_id,)
     ).fetchall()}
     rated_ids = {r['manga_id'] for r in conn.execute(
         "SELECT manga_id FROM user_ratings WHERE user_id=?", (user_id,)

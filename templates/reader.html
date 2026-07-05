@@ -25,7 +25,7 @@
         align-items: center;
         justify-content: center;
         width: 100%;
-        height: calc(100vh - 56px - 90px); /* toolbar (now top bar) + bottom strip */
+        height: calc(100vh - 56px - 70px); /* toolbar + bottom progress area */
         overflow: hidden;
         user-select: none;
         touch-action: pan-x pan-y;
@@ -37,7 +37,7 @@
     }
 
     .reader-focused .reader-image-container {
-        height: calc(100vh - 56px - 90px);
+        height: calc(100vh - 56px - 70px);
     }
     .reader-image-wrapper {
         position: relative;
@@ -122,11 +122,10 @@
         pointer-events: auto;
     }
 
-    /* Mobile: top panel removed */
+    /* Mobile: ensure toolbar always visible (same as PC), adjust heights */
     @media (hover: none) and (pointer: coarse) {
-        /* Keep reader-toolbar visible as the top bar (replaces removed site nav) */
         .reader-image-container {
-            height: calc(100vh - 56px - 70px) !important; /* toolbar + bottom area */
+            height: calc(100vh - 56px - 60px) !important; /* toolbar + bottom */
         }
     }
 
@@ -192,6 +191,13 @@
         min-width: 52px;
         text-align: center;
     }
+
+    /* Extra mobile polish for reader toolbar + scroll */
+    @media (hover: none) and (pointer: coarse) {
+        .reader-toolbar { font-size: 12px; }
+        .reader-controls button, .reader-controls .fit-btn { padding: 4px 8px; font-size: 10px; }
+        #scroll-btn, #double-btn, #dir-btn { font-size: 10px; }
+    }
 </style>
 {% endblock %}
 
@@ -206,7 +212,7 @@
             </a>
             
             <div class="flex items-center gap-x-2.5">
-                <div class="font-semibold tracking-tight text-lg">{{ manga.title }}</div>
+                <a href="/manga/{{ manga.id }}" class="font-semibold tracking-tight text-lg hover:text-[#e11d48] transition">{{ manga.title }}</a>
                 <div class="text-xs px-2 py-px bg-white/10 rounded text-white/70">{{ manga.pages_count }} стр.</div>
             </div>
         </div>
@@ -229,6 +235,13 @@
                     class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
                 <i class="fa-solid fa-columns"></i>
                 <span id="double-label">1 стр.</span>
+            </button>
+
+            <!-- Scroll mode -->
+            <button onclick="toggleScrollMode()" id="scroll-btn"
+                    class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
+                <i class="fa-solid fa-bars-staggered"></i>
+                <span id="scroll-label">Скролл</span>
             </button>
             
             <!-- Fit -->
@@ -304,6 +317,8 @@ let pinchCenterY = 0;
 
 let bottomVisible = false;
 let isTouchDevice = false;
+let scrollMode = false;
+let scrollContainer = null;  // for vertical continuous mode
 
 let hideBottomTimeout = null;
 const BOTTOM_HIDE_DELAY = 500; // 0.5 секунды — полоска с страницами исчезает после бездействия мыши
@@ -577,6 +592,18 @@ function setFitMode(mode) {
 }
 
 function goToPage(page, animate = true) {
+    if (scrollMode) {
+        // auto exit scroll mode on explicit page nav (keys/arrows)
+        scrollMode = false;
+        const sbtn = document.getElementById('scroll-btn');
+        const slabel = document.getElementById('scroll-label');
+        const sw = document.getElementById('image-wrapper');
+        const sc = document.getElementById('scroll-view');
+        if (sbtn) sbtn.classList.remove('!bg-[#e11d48]', 'text-white');
+        if (slabel) slabel.textContent = 'Скролл';
+        if (sc) sc.style.display = 'none';
+        if (sw) sw.style.display = '';
+    }
     if (page < 1) page = 1;
     if (page > TOTAL_PAGES) {
         // Reached / turned past last page → mark completed then return to manga page
@@ -681,6 +708,91 @@ function toggleDirection() {
     renderCurrentImage();
 }
 
+// SCROLL MODE (vertical continuous pages) - works on PC + mobile
+function toggleScrollMode() {
+    scrollMode = !scrollMode;
+    const btn = document.getElementById('scroll-btn');
+    const label = document.getElementById('scroll-label');
+    const wrapper = document.getElementById('image-wrapper');
+    const viewer = document.getElementById('viewer');
+
+    if (scrollMode) {
+        if (btn) btn.classList.add('!bg-[#e11d48]', 'text-white');
+        if (label) label.textContent = 'Пейдж';
+        window._scrollRestorePage = currentPage;
+
+        if (wrapper) wrapper.style.display = 'none';
+        if (!scrollContainer) {
+            scrollContainer = document.createElement('div');
+            scrollContainer.id = 'scroll-view';
+            scrollContainer.style.cssText = 'width:100%; height:100%; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; align-items:center; gap:8px; padding:4px 0; background:#000;';
+            viewer.appendChild(scrollContainer);
+        }
+        scrollContainer.innerHTML = '';
+        scrollContainer.style.display = 'flex';
+
+        // render all pages vertically - larger previews on mobile friendly
+        pages.forEach((url, i) => {
+            const img = document.createElement('img');
+            img.src = url;
+            img.style.cssText = 'max-width:100%; width:auto; height:auto; max-height:none; object-fit:contain; border:1px solid #222; border-radius:2px;';
+            img.dataset.page = (i + 1);
+            img.loading = (i < 2) ? 'eager' : 'lazy';
+            img.onerror = function(){ this.src='https://picsum.photos/id/1011/600/800'; };
+            scrollContainer.appendChild(img);
+        });
+
+        setTimeout(() => {
+            const imgs = scrollContainer.querySelectorAll('img');
+            const target = imgs[(window._scrollRestorePage || 1) - 1];
+            if (target) target.scrollIntoView({ block: 'start', behavior: 'auto' });
+            updateScrollCurrent();
+        }, 60);
+
+        scrollContainer.onscroll = updateScrollCurrent;
+        updateUI();
+        updateNavigationZones();
+    } else {
+        if (btn) btn.classList.remove('!bg-[#e11d48]', 'text-white');
+        if (label) label.textContent = 'Скролл';
+        if (scrollContainer) scrollContainer.style.display = 'none';
+        if (wrapper) wrapper.style.display = '';
+        const restore = window._scrollRestorePage || currentPage;
+        goToPage(restore, false);
+        updateNavigationZones();
+    }
+}
+
+function updateScrollCurrent() {
+    if (!scrollMode || !scrollContainer) return;
+    const imgs = Array.from(scrollContainer.querySelectorAll('img'));
+    if (!imgs.length) return;
+    const rect = scrollContainer.getBoundingClientRect();
+    let best = 1;
+    let bestVis = -1;
+    imgs.forEach((img, idx) => {
+        const r = img.getBoundingClientRect();
+        const visibleTop = Math.max(r.top, rect.top);
+        const visibleBottom = Math.min(r.bottom, rect.bottom);
+        const vis = Math.max(0, visibleBottom - visibleTop);
+        if (vis > bestVis) { bestVis = vis; best = idx + 1; }
+    });
+    if (best !== currentPage) {
+        currentPage = best;
+        if (MANGA_ID) {
+            const newUrl = `/manga/${MANGA_ID}/${currentPage}`;
+            history.replaceState({page: currentPage}, '', newUrl);
+        }
+        updateUI();
+        if (window.CURRENT_USER_ID && TOTAL_PAGES > 0) {
+            fetch('/api/progress', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ manga_id: {{ manga.id if manga.id is defined else 0 }}, last_page: currentPage, total: TOTAL_PAGES })
+            }).catch(() => {});
+        }
+    }
+}
+
 // ZOOM + PAN
 function updateZoomDisplay() {
     document.getElementById('zoom-level').innerText = Math.round(zoomLevel * 100) + '%';
@@ -715,7 +827,7 @@ function getDistance(t1, t2) {
 
 function updateNavigationZones() {
     const navs = document.querySelectorAll('.page-nav');
-    const allowClicks = zoomLevel <= 1.05 && !isFocused;
+    const allowClicks = zoomLevel <= 1.05 && !isFocused && !scrollMode;
     navs.forEach(nav => {
         nav.style.pointerEvents = allowClicks ? 'auto' : 'none';
     });
@@ -843,8 +955,9 @@ function setupZoomPan() {
             const touch = e.touches[0];
             const dx = touch.clientX - lastSingleTouchX;
             const dy = touch.clientY - lastSingleTouchY;
-            panX += dx;
-            panY += dy;
+            // divide by zoomLevel for accurate 1:1 tracking when zoomed
+            panX += dx / zoomLevel;
+            panY += dy / zoomLevel;
             wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
             lastSingleTouchX = touch.clientX;
             lastSingleTouchY = touch.clientY;
@@ -885,8 +998,9 @@ function setupZoomPan() {
         if (!isDragging) return;
         const dx = e.clientX - dragStartX;
         const dy = e.clientY - dragStartY;
-        panX = startPanX + dx;
-        panY = startPanY + dy;
+        // divide by zoom so drag distance matches finger/cursor 1:1 even when zoomed
+        panX = startPanX + dx / zoomLevel;
+        panY = startPanY + dy / zoomLevel;
         wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
     });
 
@@ -1070,18 +1184,15 @@ function initReader() {
         }, 50);
         
         if (isTouchDevice) {
-            // Hide entire top panel in mobile
-            const toolbar = document.querySelector('.reader-toolbar');
-            if (toolbar) toolbar.style.display = 'none';
-
-            // Bottom hidden by default, shown only after tap
+            // Toolbar now ALWAYS visible on mobile too (back + controls like PC)
+            // Bottom hidden by default on mobile, shown only after tap
             const bottomBar = document.getElementById('reader-bottom');
             if (bottomBar) bottomBar.classList.add('hidden');
 
-            // Fit page to screen, prevent vertical scroll
+            // Fit page to screen, prevent vertical scroll (toolbar takes space)
             const container = document.getElementById('viewer');
             if (container) {
-                container.style.height = '100vh';
+                container.style.height = 'calc(100vh - 56px)';
             }
             document.documentElement.style.overflow = 'hidden';
             document.body.style.overflow = 'hidden';
