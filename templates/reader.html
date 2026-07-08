@@ -25,7 +25,7 @@
         align-items: center;
         justify-content: center;
         width: 100%;
-        height: calc(100vh - 56px - 70px); /* toolbar + bottom progress area */
+        height: calc(100vh - 44px - 60px); /* compact toolbar for mobile + bottom */
         overflow: hidden;
         user-select: none;
         touch-action: pan-x pan-y;
@@ -37,7 +37,7 @@
     }
 
     .reader-focused .reader-image-container {
-        height: calc(100vh - 56px - 70px);
+        height: calc(100vh - 44px - 60px);
     }
     .reader-image-wrapper {
         position: relative;
@@ -194,9 +194,9 @@
 
     /* Extra mobile polish for reader toolbar + scroll */
     @media (hover: none) and (pointer: coarse) {
-        .reader-toolbar { font-size: 12px; }
-        .reader-controls button, .reader-controls .fit-btn { padding: 4px 8px; font-size: 10px; }
-        #scroll-btn, #double-btn, #dir-btn { font-size: 10px; }
+        .reader-toolbar { font-size: 12px; height: 44px !important; }
+        .reader-controls .font-mono { font-size: 11px; padding-left: 8px; padding-right: 8px; }
+        #gear-btn { padding: 4px 8px; }
     }
 </style>
 {% endblock %}
@@ -204,65 +204,98 @@
 {% block content %}
 <div class="reader-bg text-white h-screen flex flex-col overflow-hidden select-none">
     <!-- Top toolbar -->
-    <div class="reader-toolbar px-4 h-[56px] flex items-center justify-between z-40 border-b border-white/10 shrink-0">
-        <div class="flex items-center gap-x-4">
-            <a href="/manga/{{ manga.id }}" onclick="if (history.length > 1) { event.preventDefault(); history.back(); } return false;" class="flex items-center text-white/70 hover:text-white px-3 py-1.5 gap-x-2 rounded-lg hover:bg-white/10 text-sm">
+    <div class="reader-toolbar px-3 sm:px-4 h-11 sm:h-[56px] flex items-center justify-between z-40 border-b border-white/10 shrink-0">
+        <div class="flex items-center gap-x-2 sm:gap-x-4 min-w-0">
+            <a href="/manga/{{ manga.id }}" onclick="if (history.length > 1) { event.preventDefault(); history.back(); } return false;" class="flex items-center text-white/70 hover:text-white px-2 sm:px-3 py-1 gap-x-1 sm:gap-x-2 rounded-lg hover:bg-white/10 text-sm">
                 <i class="fa-solid fa-arrow-left"></i>
                 <span class="hidden sm:inline">Назад</span>
             </a>
             
-            <div class="flex items-center gap-x-2.5">
-                <a href="/manga/{{ manga.id }}" class="font-semibold tracking-tight text-lg hover:text-[#e11d48] transition">{{ manga.title }}</a>
-                <div class="text-xs px-2 py-px bg-white/10 rounded text-white/70">{{ manga.pages_count }} стр.</div>
+            <!-- Title hidden on mobile to save space; author/original handled on detail -->
+            <div class="hidden sm:flex items-center gap-x-2.5">
+                <a href="/manga/{{ manga.id }}" class="font-semibold tracking-tight text-lg hover:text-[#e11d48] transition truncate max-w-[240px]">{{ manga.title }}</a>
+                <div class="text-xs px-2 py-px bg-white/10 rounded text-white/70 hidden md:block">{{ manga.pages_count }} стр.</div>
             </div>
         </div>
 
-        <div class="flex items-center gap-x-1 reader-controls">
-            <!-- Page indicator -->
-            <div class="font-mono text-sm px-4 py-1 bg-white/5 rounded-full border border-white/10">
+        <!-- Mobile compact: back + page num + gear (settings) -->
+        <div class="flex items-center gap-x-1 sm:gap-x-2 reader-controls flex-1 sm:flex-none justify-end">
+            <!-- Page indicator (always prominent) -->
+            <div class="font-mono text-xs sm:text-sm px-2 sm:px-4 py-0.5 sm:py-1 bg-white/5 rounded-full border border-white/10 tabular-nums">
                 <span id="page-current">1</span> / <span id="page-total">{{ manga.pages_count }}</span>
             </div>
 
-            <!-- Direction -->
-            <button onclick="toggleDirection()" id="dir-btn"
-                    class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
-                <i class="fa-solid fa-arrow-right"></i>
-                <span id="dir-label">LTR</span>
+            <!-- Gear for all settings (mobile primary, PC also has) -->
+            <button onclick="toggleReaderSettings()" id="gear-btn"
+                    class="px-2 py-1 text-sm bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1 border border-white/10"
+                    title="Настройки читалки">
+                <i class="fa-solid fa-cog"></i>
             </button>
 
-            <!-- Modes -->
-            <button onclick="toggleDoublePage()" id="double-btn"
-                    class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
-                <i class="fa-solid fa-columns"></i>
-                <span id="double-label">1 стр.</span>
-            </button>
+            <!-- Desktop only full controls -->
+            <div class="hidden md:flex items-center gap-x-1">
+                <!-- Direction -->
+                <button onclick="toggleDirection()" id="dir-btn"
+                        class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
+                    <i class="fa-solid fa-arrow-right"></i>
+                    <span id="dir-label">LTR</span>
+                </button>
 
-            <!-- Scroll mode -->
-            <button onclick="toggleScrollMode()" id="scroll-btn"
-                    class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
-                <i class="fa-solid fa-bars-staggered"></i>
-                <span id="scroll-label">Скролл</span>
-            </button>
-            
-            <!-- Fit -->
-            <div class="flex border border-white/10 rounded-xl overflow-hidden text-xs">
-                <button onclick="setFitMode('width')" id="fit-width" class="fit-btn px-3 py-1.5 active">По ширине</button>
-                <button onclick="setFitMode('height')" id="fit-height" class="fit-btn px-3 py-1.5">По высоте</button>
-                <button onclick="setFitMode('original')" id="fit-original" class="fit-btn px-3 py-1.5">Оригинал</button>
-            </div>
+                <!-- Modes -->
+                <button onclick="toggleDoublePage()" id="double-btn"
+                        class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
+                    <i class="fa-solid fa-columns"></i>
+                    <span id="double-label">1 стр.</span>
+                </button>
 
-            <!-- Zoom -->
-            <div class="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl pl-1 pr-3 text-xs">
-                <button onclick="zoomOut()" class="px-2 py-1 hover:bg-white/10 rounded-l-xl"><i class="fa-solid fa-minus"></i></button>
-                <div id="zoom-level" class="zoom-display font-mono tabular-nums">100%</div>
-                <button onclick="zoomIn()" class="px-2 py-1 hover:bg-white/10 rounded-r-xl"><i class="fa-solid fa-plus"></i></button>
-                <button onclick="resetZoom()" class="pl-2 text-[11px] opacity-70 hover:opacity-100">RESET</button>
+                <!-- Scroll mode -->
+                <button onclick="toggleScrollMode()" id="scroll-btn"
+                        class="px-3 py-1.5 text-xs bg-white/5 hover:bg-white/10 rounded-xl flex items-center gap-1.5 border border-white/10">
+                    <i class="fa-solid fa-bars-staggered"></i>
+                    <span id="scroll-label">Скролл</span>
+                </button>
+                
+                <!-- Fit -->
+                <div class="flex border border-white/10 rounded-xl overflow-hidden text-xs">
+                    <button onclick="setFitMode('width')" id="fit-width" class="fit-btn px-3 py-1.5">По ширине</button>
+                    <button onclick="setFitMode('height')" id="fit-height" class="fit-btn px-3 py-1.5 active">По высоте</button>
+                    <button onclick="setFitMode('original')" id="fit-original" class="fit-btn px-3 py-1.5">Оригинал</button>
+                </div>
+
+                <!-- Zoom -->
+                <div class="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl pl-1 pr-3 text-xs">
+                    <button onclick="zoomOut()" class="px-2 py-1 hover:bg-white/10 rounded-l-xl"><i class="fa-solid fa-minus"></i></button>
+                    <div id="zoom-level" class="zoom-display font-mono tabular-nums">100%</div>
+                    <button onclick="zoomIn()" class="px-2 py-1 hover:bg-white/10 rounded-r-xl"><i class="fa-solid fa-plus"></i></button>
+                    <button onclick="resetZoom()" class="pl-2 text-[11px] opacity-70 hover:opacity-100">RESET</button>
+                </div>
             </div>
 
             <button onclick="if (history.length > 1) { history.back(); } else { window.location.href='/manga/{{ manga.id }}'; }" 
-                    class="px-3 py-1.5 hover:bg-white/10 rounded-xl text-sm flex items-center gap-x-1 border border-white/10">
+                    class="px-2 py-1 hover:bg-white/10 rounded-xl text-sm flex items-center gap-x-1 border border-white/10">
                 <i class="fa-solid fa-times"></i>
             </button>
+        </div>
+    </div>
+
+    <!-- Reader settings popup (for gear, especially mobile) -->
+    <div id="reader-settings" class="hidden fixed z-[60] bg-[#111] border border-white/10 rounded-2xl p-3 text-sm shadow-xl" style="top: 48px; right: 8px; min-width: 180px;">
+        <div class="flex flex-col gap-2">
+            <button onclick="toggleDirection(); hideReaderSettings();" class="text-left px-3 py-1 hover:bg-white/10 rounded flex items-center gap-2"><i class="fa-solid fa-arrow-right w-4"></i> <span>Направление <span id="set-dir">LTR</span></span></button>
+            <button onclick="toggleDoublePage(); hideReaderSettings();" class="text-left px-3 py-1 hover:bg-white/10 rounded flex items-center gap-2"><i class="fa-solid fa-columns w-4"></i> <span id="set-double">1 стр.</span></button>
+            <button onclick="toggleScrollMode(); hideReaderSettings();" class="text-left px-3 py-1 hover:bg-white/10 rounded flex items-center gap-2"><i class="fa-solid fa-bars-staggered w-4"></i> <span id="set-scroll">Скролл</span></button>
+            <div class="border-t border-white/10 my-1"></div>
+            <div class="px-1 text-xs text-white/50">Подгонка</div>
+            <div class="flex gap-1">
+                <button onclick="setFitMode('width'); hideReaderSettings();" class="flex-1 py-1 text-xs bg-white/5 rounded">Ширина</button>
+                <button onclick="setFitMode('height'); hideReaderSettings();" class="flex-1 py-1 text-xs bg-white/5 rounded">Высота</button>
+                <button onclick="setFitMode('original'); hideReaderSettings();" class="flex-1 py-1 text-xs bg-white/5 rounded">Ориг</button>
+            </div>
+            <div class="flex gap-1 mt-1">
+                <button onclick="zoomOut(); " class="flex-1 py-1 text-xs bg-white/5 rounded">-</button>
+                <button onclick="resetZoom(); hideReaderSettings();" class="flex-1 py-1 text-xs bg-white/5 rounded">100%</button>
+                <button onclick="zoomIn(); " class="flex-1 py-1 text-xs bg-white/5 rounded">+</button>
+            </div>
         </div>
     </div>
 
@@ -303,7 +336,7 @@ let pagesThumb = [];   // thumb URLs for strip (falls back to full)
 let currentPage = 1; // 1-based
 let isDouble = false;
 let direction = 'ltr'; // ltr or rtl
-let fitMode = 'width';
+let fitMode = 'height';
 let zoomLevel = 1;
 let panX = 0, panY = 0;
 let isDragging = false;
@@ -560,7 +593,7 @@ function applyFit() {
             img.style.width = 'auto';
             img.style.height = 'auto';
         } else if (fitMode === 'height') {
-            img.style.maxHeight = 'calc(100vh - 110px)';
+            img.style.maxHeight = 'calc(100vh - 80px)';  /* adjusted for current toolbar + progress */
             img.style.maxWidth = '100%';
             img.style.height = 'auto';
             img.style.width = 'auto';
@@ -721,6 +754,10 @@ function toggleScrollMode() {
         if (label) label.textContent = 'Пейдж';
         window._scrollRestorePage = currentPage;
 
+        // ensure top bar stays visible in scroll mode (mobile fix)
+        const toolbarEl = document.querySelector('.reader-toolbar');
+        if (toolbarEl) toolbarEl.style.display = '';
+
         if (wrapper) wrapper.style.display = 'none';
         if (!scrollContainer) {
             scrollContainer = document.createElement('div');
@@ -731,15 +768,33 @@ function toggleScrollMode() {
         scrollContainer.innerHTML = '';
         scrollContainer.style.display = 'flex';
 
-        // render all pages vertically - larger previews on mobile friendly
+        // Economical scroll mode: use data-src + IntersectionObserver to load only near-viewport images
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    if (img.dataset.src) {
+                        img.src = img.dataset.src;
+                        delete img.dataset.src;
+                    }
+                    observer.unobserve(img);
+                }
+            });
+        }, { root: scrollContainer, rootMargin: '200px 0px', threshold: 0.01 });
+
         pages.forEach((url, i) => {
             const img = document.createElement('img');
-            img.src = url;
             img.style.cssText = 'max-width:100%; width:auto; height:auto; max-height:none; object-fit:contain; border:1px solid #222; border-radius:2px;';
             img.dataset.page = (i + 1);
-            img.loading = (i < 2) ? 'eager' : 'lazy';
+            if (i < 3) {
+                img.src = url; // eager for first few
+            } else {
+                img.dataset.src = url;
+                img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'; // placeholder 1x1
+            }
             img.onerror = function(){ this.src='https://picsum.photos/id/1011/600/800'; };
             scrollContainer.appendChild(img);
+            if (i >= 3) observer.observe(img);
         });
 
         setTimeout(() => {
@@ -839,6 +894,41 @@ function updateNavigationZones() {
     }
 }
 
+function toggleReaderSettings() {
+    const p = document.getElementById('reader-settings');
+    if (!p) return;
+    const gear = document.getElementById('gear-btn');
+    if (p.classList.contains('hidden') || p.style.display === 'none' || !p.style.display) {
+        p.classList.remove('hidden');
+        p.style.display = 'block';
+        // sync
+        const dirEl = document.getElementById('dir-label');
+        const d = document.getElementById('set-dir'); if (d && dirEl) d.textContent = dirEl.textContent || 'LTR';
+        const dblEl = document.getElementById('double-label');
+        const db = document.getElementById('set-double'); if (db && dblEl) db.textContent = dblEl.textContent || '1 стр.';
+        const sc = document.getElementById('set-scroll'); if (sc) sc.textContent = scrollMode ? 'Пейдж' : 'Скролл';
+    } else {
+        hideReaderSettings();
+    }
+}
+function hideReaderSettings() {
+    const p = document.getElementById('reader-settings');
+    if (p) {
+        p.classList.add('hidden');
+        p.style.display = '';
+    }
+}
+// close settings on outside tap/click
+document.addEventListener('click', function(ev) {
+    const p = document.getElementById('reader-settings');
+    const gear = document.getElementById('gear-btn');
+    if (!p || !gear) return;
+    if (p.style.display === 'block' && !p.contains(ev.target) && ev.target !== gear && !gear.contains(ev.target)) {
+        p.classList.add('hidden');
+        p.style.display = '';
+    }
+});
+
 function zoomIn(delta = 0.15) {
     const wrapper = document.getElementById('image-wrapper');
     zoomLevel = Math.min(zoomLevel + delta, 4.5);
@@ -875,20 +965,23 @@ function setupZoomPan() {
     const container = document.getElementById('viewer');
     const wrapper = document.getElementById('image-wrapper');
     
-    // Wheel zoom
+    // Wheel zoom - only in paged mode; in scroll mode let native wheel scroll the pages
     container.addEventListener('wheel', function(e) {
+        if (scrollMode) {
+            return;  // allow default scroll in vertical mode
+        }
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
         const newZoom = Math.max(0.5, Math.min(4.5, zoomLevel + delta));
         
-        // Zoom toward mouse
+        // Zoom toward the cursor point. Center-relative works reliably on desktop for the centered viewer.
         const rect = container.getBoundingClientRect();
         const mouseX = e.clientX - rect.left - rect.width / 2;
         const mouseY = e.clientY - rect.top - rect.height / 2;
-        
+
         const scaleFactor = newZoom / zoomLevel;
-        panX = panX * scaleFactor + mouseX * (1 - scaleFactor);
-        panY = panY * scaleFactor + mouseY * (1 - scaleFactor);
+        panX = (panX - mouseX) * scaleFactor + mouseX;
+        panY = (panY - mouseY) * scaleFactor + mouseY;
         
         zoomLevel = newZoom;
         wrapper.style.transform = `scale(${zoomLevel}) translate(${panX}px, ${panY}px)`;
@@ -925,8 +1018,9 @@ function setupZoomPan() {
             pinchInitialDist = getDistance(e.touches[0], e.touches[1]);
             pinchInitialZoom = zoomLevel;
             const rect = container.getBoundingClientRect();
-            pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left - rect.width / 2;
-            pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top - rect.height / 2;
+            // absolute point in container for accurate mobile zoom-to-touch
+            pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+            pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
         } else if (e.touches.length === 1) {
             lastSingleTouchX = e.touches[0].clientX;
             lastSingleTouchY = e.touches[0].clientY;
@@ -941,6 +1035,7 @@ function setupZoomPan() {
             newZoom = Math.max(0.5, Math.min(4.5, newZoom));
 
             const factor = newZoom / zoomLevel;
+            // use absolute from container top-left for correct zoom-to-finger on mobile
             panX = (panX - pinchCenterX) * factor + pinchCenterX;
             panY = (panY - pinchCenterY) * factor + pinchCenterY;
 
@@ -1035,36 +1130,7 @@ function setupZoomPan() {
         });
     }
 
-    // Mobile: tap on image to toggle bottom thumbnails (appears only after tap)
-    if (isTouchDevice) {
-        let tapX = 0, tapY = 0, moved = false;
-        const iw = document.getElementById('image-wrapper');
-        iw.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) {
-                tapX = e.touches[0].clientX;
-                tapY = e.touches[0].clientY;
-                moved = false;
-            }
-        }, {passive: true});
-
-        iw.addEventListener('touchmove', (e) => {
-            if (e.touches.length === 1) {
-                const dx = Math.abs(e.touches[0].clientX - tapX);
-                const dy = Math.abs(e.touches[0].clientY - tapY);
-                if (dx > 10 || dy > 10) moved = true;
-            }
-        }, {passive: true});
-
-        iw.addEventListener('touchend', (e) => {
-            if (!moved) {
-                const bottom = document.getElementById('reader-bottom');
-                if (bottom) {
-                    bottomVisible = !bottomVisible;
-                    if (bottomVisible) bottom.classList.remove('hidden'); else bottom.classList.add('hidden');
-                }
-            }
-        });
-    }
+    // (duplicate tap listener removed - was attached twice on touch devices)
 }
 
 function setupKeyboard() {
@@ -1078,7 +1144,8 @@ function setupKeyboard() {
             prevPage();
         }
         if (e.key.toLowerCase() === 'f') {
-            setFitMode(fitMode === 'width' ? 'height' : 'width');
+            // Quick toggle between width/height (default is now height)
+            setFitMode(fitMode === 'height' ? 'width' : 'height');
         }
         if (e.key === 'Escape') {
             window.location.href = `/manga/${MANGA_ID || MANGA_SLUG}`;
@@ -1126,7 +1193,7 @@ function setupKeyboard() {
             updateFocusOnZoom();
             updateNavigationZones();
         } else {
-            const modes = ['width', 'height', 'original'];
+            const modes = ['height', 'width', 'original'];
             let i = modes.indexOf(fitMode);
             setFitMode(modes[(i + 1) % modes.length]);
         }
@@ -1171,8 +1238,8 @@ function initReader() {
     isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
     loadMangaData().then(() => {
-        // Default fit width
-        document.getElementById('fit-width').classList.add('active');
+        // Default fit height (user preference)
+        setFitMode('height');
         
         // Aggressive initial preload forward + adjacent for seamless
         setTimeout(() => {
@@ -1192,13 +1259,10 @@ function initReader() {
             // Fit page to screen, prevent vertical scroll (toolbar takes space)
             const container = document.getElementById('viewer');
             if (container) {
-                container.style.height = 'calc(100vh - 56px)';
+                container.style.height = 'calc(100vh - 44px)';
             }
             document.documentElement.style.overflow = 'hidden';
             document.body.style.overflow = 'hidden';
-
-            // Default fit to width for mobile
-            setFitMode('width');
         } else {
             // Desktop: auto-hide the thumbnails strip (лента страниц) after mouse inactivity.
             // The thin progress line stays. Reappears on mouse movement.

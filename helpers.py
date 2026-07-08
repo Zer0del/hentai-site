@@ -330,7 +330,7 @@ def update_user_history(user_id, manga_id, last_page, completed=False):
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id, manga_id) DO UPDATE SET
             last_page = MAX(last_page, ?),
-            completed = MAX(completed, ?),
+            completed = ?,
             last_read_at = CURRENT_TIMESTAMP
     """, (user_id, manga_id, last_page, int(completed), last_page, int(completed)))
     conn.commit()
@@ -634,6 +634,8 @@ def init_db():
         mangas_cols = [row[1] for row in c.execute("PRAGMA table_info(mangas)").fetchall()]
         if "author" not in mangas_cols:
             c.execute("ALTER TABLE mangas ADD COLUMN author TEXT DEFAULT ''")
+        if "original_title" not in mangas_cols:
+            c.execute("ALTER TABLE mangas ADD COLUMN original_title TEXT DEFAULT ''")
     except Exception:
         pass
 

@@ -85,68 +85,13 @@ try:
 except ImportError:
     HAS_PIL = False
 
-# Bulk import helpers (from the companion script)
-try:
-    from bulk_import import (
-        get_image_files,
-        choose_cover,
-        get_archive_files,
-        choose_best_archive,
-        extract_first_page_from_archive,
-        count_images_in_archive,
-        create_pages_zip,
-    )
-    HAS_BULK_HELPERS = True
-except Exception as e:
-    HAS_BULK_HELPERS = False
-    logger.warning("bulk_import helpers not available: %s", e)
-
 # Config
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads", "manga")
 DB_PATH = os.path.join(DATA_DIR, "manga.db")
 
-# ==================== BULK IMPORT CONFIG ====================
-BULK_PROGRESS_FILE = Path("bulk_import_progress.json")
-BULK_ROOT_FILE = Path("bulk_root.txt")
-BULK_BASE_URL = os.environ.get("BULK_BASE_URL", "http://127.0.0.1:5000")
-DEFAULT_BULK_ROOT = Path(os.environ.get("BULK_ROOT", str(Path.cwd() / "manga_import")))  # portable default; override via env / bulk_root.txt UI / bulk page. On server use server path!
-
-def get_bulk_root() -> Path:
-    """Returns the current manga root folder.
-    Prefers value saved via UI (bulk_root.txt), falls back to default.
-    """
-    try:
-        if BULK_ROOT_FILE.exists():
-            p = Path(BULK_ROOT_FILE.read_text(encoding="utf-8").strip())
-            if p.exists() and p.is_dir():
-                return p
-    except Exception:
-        pass
-    return DEFAULT_BULK_ROOT
-
-def set_bulk_root(path_str: str) -> Path:
-    """Set and persist the scan root. Raises ValueError if invalid."""
-    p = Path(path_str).expanduser().resolve()
-    if not (p.exists() and p.is_dir()):
-        raise ValueError(f"Папка не найдена или это не директория: {p}")
-    BULK_ROOT_FILE.write_text(str(p), encoding="utf-8")
-    return p
-# ========================================================
-
-# Bulk state moved to bulk.py for modularity
-# bulk import removed
-_bulk_lock = threading.RLock()
-_bulk_state = {
-    "running": False,
-    "total": 0,
-    "done": 0,
-    "current": "",
-    "logs": [],
-    "items": [],
-}
-_bulk_stop_requested = False
+# Legacy bulk system fully removed. Mass folder import (mass_import) + multi-ZIP in add form is the active way.
 
 # Persistent secret key (stable across restarts for sessions)
 SECRET_FILE = os.path.join(DATA_DIR, ".secret_key")
@@ -588,312 +533,10 @@ def _finalize_cover(manga_dir, initial_cover_name):
     return cover_name
 
 
-# -------------------- BULK IMPORT HELPERS (for web UI) --------------------
-def _append_bulk_log(msg: str):
-    with _bulk_lock:
-        _bulk_state["logs"].append(msg)
-        # keep last ~80 lines
-        if len(_bulk_state["logs"]) > 80:
-            _bulk_state["logs"] = _bulk_state["logs"][-80:]
+# Legacy bulk helpers removed.
 
 
-def _get_existing_titles_bulk() -> set:
-    """Get lowercase titles from DB."""
-    try:
-        conn = get_db()
-        rows = conn.execute("SELECT title FROM mangas").fetchall()
-        conn.close()
-        return {r["title"].lower() for r in rows}
-    except Exception:
-        return set()
-
-
-def _force_wal_checkpoint():
-    """Force SQLite WAL checkpoint after heavy batch writes (bulk import).
-    This often prevents "hung" reads after many INSERTs + file writes.
-    """
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("PRAGMA wal_checkpoint(FULL);")
-        conn.close()
-    except Exception:
-        pass  # best effort, don't break import
-
-
-def _scan_bulk_candidates():
-    """Scan current bulk root and return list of item dicts."""
-    candidates = []
-    if not HAS_BULK_HELPERS:
-        return candidates
-
-    root = get_bulk_root()
-    if not root.exists():
-        return candidates
-
-    existing = _get_existing_titles_bulk()
-
-    processed = set()
-    if BULK_PROGRESS_FILE.exists():
-        try:
-            processed = set(json.loads(BULK_PROGRESS_FILE.read_text(encoding="utf-8")))
-        except Exception:
-            pass
-
-    for author_dir in sorted(root.iterdir()):
-        if not author_dir.is_dir():
-            continue
-        author = author_dir.name
-
-        for item in sorted(author_dir.iterdir()):
-            if item.is_dir():
-                # Case 1: manga as subfolder (may contain loose images or zip inside)
-                manga_dir = item
-                key = f"{author}/{manga_dir.name}"
-                title = manga_dir.name
-
-                images = get_image_files(manga_dir)
-                archives = get_archive_files(manga_dir)
-
-                if archives:
-                    typ = "archive"
-                    # pick best archive inside the folder (for cover)
-                    arc = choose_best_archive(archives, title)
-                    num = None  # avoid expensive open+count during scan; UI shows "ZIP"
-                elif len(images) >= 2:
-                    typ = "loose"
-                    num = len(images)
-                else:
-                    continue
-
-                container = str(manga_dir)
-                is_direct = False
-
-            elif item.is_file() and item.suffix.lower() in {".zip", ".cbz"}:
-                # Case 2: manga provided as direct .zip/.cbz inside the author folder
-                key = f"{author}/{item.stem}"
-                title = item.stem
-                num = None  # avoid expensive count during scan (opened only on actual import)
-                container = str(item)
-                is_direct = True
-                typ = "archive"
-            else:
-                continue
-
-            if key in processed:
-                status = "done"
-            elif title.lower() in existing:
-                status = "exists"
-            else:
-                status = "pending"
-
-            candidates.append({
-                "key": key,
-                "author": author,
-                "title": title,
-                "type": typ,
-                "pages": num,
-                "status": status,
-                "container": container,
-                "is_direct": is_direct,
-            })
-    return candidates
-
-
-def _create_pages_zip_from_list(images, title):
-    """Wrapper so we always have the function."""
-    if HAS_BULK_HELPERS and create_pages_zip:
-        return create_pages_zip(images, title)
-    # Fallback minimal zip creator
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-    tmp.close()
-    zip_path = Path(tmp.name)
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for img in images:
-            zf.write(img, arcname=img.name)
-    return zip_path
-
-
-def _bulk_import_worker():
-    """Background worker. Updates _bulk_state live."""
-    global _bulk_stop_requested
-    items = []
-    try:
-        with _bulk_lock:
-            _bulk_state["running"] = True
-            _bulk_state["done"] = 0
-            _bulk_state["current"] = ""
-            _bulk_state["logs"] = ["Starting bulk import..."]
-            items = list(_bulk_state["items"])  # snapshot reference
-            _bulk_stop_requested = False
-
-        # Use Flask's test client for internal /api/add_manga calls.
-        # Avoids all network/port problems on server (gunicorn, sockets, etc).
-        # Password auth is now sufficient (no login/grant needed).
-        _the_app = globals().get('app') or __import__(__name__).app
-        client = _the_app.test_client()
-
-        existing = _get_existing_titles_bulk()
-
-        processed = set()
-        if BULK_PROGRESS_FILE.exists():
-            try:
-                processed = set(json.loads(BULK_PROGRESS_FILE.read_text(encoding="utf-8")))
-            except Exception:
-                pass
-
-        total = len(items)
-        with _bulk_lock:
-            _bulk_state["total"] = total
-
-        for idx, item in enumerate(items):
-            with _bulk_lock:
-                if _bulk_stop_requested or not _bulk_state["running"]:
-                    _append_bulk_log("⏹ Import stopped.")
-                    break
-                _bulk_state["current"] = f"{item['author']} / {item['title']}"
-                _bulk_state["done"] = idx
-                item["status"] = "processing"
-            _append_bulk_log(f"→ Processing: {item['author']} / {item['title']}")
-
-            key = item["key"]
-            title = item["title"]
-            author = item["author"]
-
-            container = Path(item.get("container", "")) if item.get("container") else None
-            is_direct = bool(item.get("is_direct", False))
-
-            if key in processed or title.lower() in existing:
-                with _bulk_lock:
-                    item["status"] = "skipped"
-                _append_bulk_log(f"  Skip (already): {title}")
-                continue
-
-            cover_path = None
-            zip_path = None
-            temps_to_clean = []
-
-            try:
-                if is_direct and container and container.exists():
-                    # Direct .zip/.cbz under author folder
-                    archive_path = container
-                    cover_path = extract_first_page_from_archive(archive_path) if HAS_BULK_HELPERS else None
-                    if cover_path:
-                        temps_to_clean.append(cover_path)
-                    zip_path = archive_path
-                elif container and container.is_dir():
-                    # Traditional: manga is a subfolder
-                    manga_dir = container
-                    images = get_image_files(manga_dir) if HAS_BULK_HELPERS else []
-                    archives = get_archive_files(manga_dir) if HAS_BULK_HELPERS else []
-
-                    if archives:
-                        arc = choose_best_archive(archives, title)
-                        cover_path = extract_first_page_from_archive(arc) if HAS_BULK_HELPERS else None
-                        if cover_path:
-                            temps_to_clean.append(cover_path)
-                        zip_path = arc
-                    elif len(images) >= 2:
-                        cover_path = choose_cover(images) if HAS_BULK_HELPERS else None
-                        pages_list = [p for p in images if p != cover_path]
-                        zip_path = _create_pages_zip_from_list(pages_list, title)
-                        temps_to_clean.append(zip_path)
-                    else:
-                        with _bulk_lock:
-                            item["status"] = "error"
-                        _append_bulk_log(f"  No content for {title}")
-                        continue
-                else:
-                    with _bulk_lock:
-                        item["status"] = "error"
-                    _append_bulk_log(f"  No valid container for {title}")
-                    continue
-
-                if not cover_path or not zip_path or not os.path.exists(str(cover_path)):
-                    raise RuntimeError("Failed to prepare cover or pages archive")
-
-                data = {
-                    "password": ADMIN_PASS,
-                    "title": title,
-                    "author": author,
-                    "tags": "",
-                    "description": f"Imported via bulk UI ({item.get('type','')})",
-                }
-                cover_fh = open(cover_path, "rb")
-                zip_fh = open(zip_path, "rb")
-                data["cover"] = (Path(cover_path).name, cover_fh, "image/*")
-                data["zipfile"] = (f"{title}.zip", zip_fh, "application/zip")
-
-                resp = client.post(
-                    "/api/add_manga",
-                    data=data,
-                )
-
-                # close files
-                try: cover_fh.close()
-                except: pass
-                try: zip_fh.close()
-                except: pass
-
-                ok = False
-                err = ""
-                if resp.status_code == 200:
-                    try:
-                        j = resp.json()
-                        ok = bool(j.get("ok"))
-                        if not ok:
-                            err = j.get("error", "")
-                    except:
-                        pass
-                else:
-                    err = resp.text[:150]
-
-                if ok:
-                    with _bulk_lock:
-                        item["status"] = "added"
-                    _append_bulk_log(f"  ✓ Added: {title}")
-                    processed.add(key)
-                    try:
-                        BULK_PROGRESS_FILE.write_text(
-                            json.dumps(sorted(processed), ensure_ascii=False, indent=2),
-                            encoding="utf-8"
-                        )
-                    except:
-                        pass
-
-                    # Force checkpoint after each heavy add to keep the site responsive
-                    _force_wal_checkpoint()
-                else:
-                    with _bulk_lock:
-                        item["status"] = "error"
-                    _append_bulk_log(f"  ✗ Failed: {title} — {err or resp.status_code}")
-
-            except Exception as ex:
-                with _bulk_lock:
-                    item["status"] = "error"
-                _append_bulk_log(f"  ✗ Exception: {title} — {str(ex)[:90]}")
-            finally:
-                for tf in temps_to_clean:
-                    try:
-                        p = Path(tf)
-                        if p.exists():
-                            p.unlink()
-                    except:
-                        pass
-
-            time.sleep(1.0)  # be nice to the server + allow other requests + file system to settle after heavy Pillow work (Windows especially)
-
-    except Exception as ex:
-        _append_bulk_log(f"Fatal error in worker: {ex}")
-    finally:
-        with _bulk_lock:
-            _bulk_state["running"] = False
-            _bulk_state["current"] = "Finished"
-            _append_bulk_log("Bulk import run completed.")
-            _bulk_stop_requested = False
-
-        # Final checkpoint after the whole run
-        _force_wal_checkpoint()
-
+# Legacy bulk removed.
 
 # -------------------- USER & RECOMMENDATIONS HELPERS --------------------
 
@@ -946,7 +589,10 @@ def invalidate_user_tag_cache(user_id):
     """Clear tag weights (and related) cache for a user so profile/recommendations update immediately."""
     prefix = f"tag_weights:{user_id}"
     rec_prefix = f"recs:{user_id}"
-    to_delete = [k for k in list(_cache.keys()) if k.startswith(prefix) or k.startswith(rec_prefix)]
+    to_delete = []
+    for k in list(_cache.keys()):
+        if isinstance(k, str) and (k.startswith(prefix) or rec_prefix in k):
+            to_delete.append(k)
     for k in to_delete:
         _cache.pop(k, None)
 
@@ -1028,7 +674,17 @@ def _compute_recommendations(user_id, limit=8):
             if len(result) >= limit:
                 break
         conn.close()
-        return result
+        # Final strict filter to guarantee no favorited/rated/read manga leaks (re-query fresh)
+        try:
+            c2 = get_db()
+            interacted = set()
+            for tbl in ("user_favorites", "user_ratings", "user_history"):
+                for rr in c2.execute(f"SELECT manga_id FROM {tbl} WHERE user_id=?", (user_id,)).fetchall():
+                    interacted.add(rr['manga_id'])
+            c2.close()
+            result = [x for x in result if x['id'] not in interacted]
+        except Exception as e: print('recs filter err', e)
+        return result[:limit]
 
     # Исключаем прочитанные
     conn = get_db()
@@ -1066,7 +722,17 @@ def _compute_recommendations(user_id, limit=8):
         m["cover"] = get_cover_url(m, thumb=True)
         result.append(m)
     conn.close()
-    return result
+    # Final strict filter to guarantee no favorited/rated/read manga leaks (re-query fresh)
+    try:
+        c2 = get_db()
+        interacted = set()
+        for tbl in ("user_favorites", "user_ratings", "user_history"):
+            for rr in c2.execute(f"SELECT manga_id FROM {tbl} WHERE user_id=?", (user_id,)).fetchall():
+                interacted.add(rr['manga_id'])
+        c2.close()
+        result = [x for x in result if x['id'] not in interacted]
+    except Exception as e: print('recs filter err', e)
+    return result[:limit]
 
 
 def get_recommendations(user_id, limit=8):

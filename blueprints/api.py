@@ -14,8 +14,7 @@ def _get_shared():
         _finalize_cover, extract_zip_and_normalize, get_manga_dir, get_next_page_index,
         slugify, _create_thumbnail,
         natural_sort_key,
-        logger, _bulk_lock, _bulk_state, _append_bulk_log, _force_wal_checkpoint,
-        BULK_PROGRESS_FILE, ADMIN_PASS, get_bulk_root
+        logger, ADMIN_PASS
     )
     d = locals()
     d['ADMIN_PASS'] = ADMIN_PASS
@@ -76,6 +75,7 @@ def api_manga(slug):
         "slug": row["slug"],
         "title": row["title"],
         "author": row["author"] or "",
+        "original_title": row["original_title"] if "original_title" in row.keys() else "",
         "cover": cover,
         "cover_thumb": cover_thumb,
         "raw_cover": row["cover"],
@@ -225,7 +225,14 @@ def api_mark_read():
     try:
         manga_id = int(data.get("manga_id"))
         last_page = int(data.get("last_page", 1))
-        completed = bool(data.get("completed", False))
+        read_val = data.get("read")
+        if read_val is not None:
+            # JS sends "read": true/false meaning desired completed/read state
+            completed = bool(read_val) if isinstance(read_val, (bool, int)) else str(read_val).lower() in ('1', 'true', 'yes')
+            if completed:
+                last_page = max(last_page, 9999)  # mark full read
+        else:
+            completed = bool(data.get("completed", False))
     except Exception:
         return jsonify({"error": "bad input"}), 400
     shared['update_user_history'](user['id'], manga_id, last_page, completed)
@@ -339,6 +346,7 @@ def api_add_manga():
 
         title = (request.form.get("title") or "").strip()
         author = (request.form.get("author") or "").strip()
+        original_title = (request.form.get("original_title") or "").strip()
         description = (request.form.get("description") or "").strip()
         tags_raw = (request.form.get("tags") or "").strip()
 
@@ -379,9 +387,9 @@ def api_add_manga():
                     cover_name = pages[0]
                 try:
                     conn.execute("""
-                        INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-                    """, (this_slug, this_title, this_author, description, cover_name, json.dumps(pages), json.dumps(tags)))
+                        INSERT INTO mangas (slug, title, author, original_title, description, cover, pages, tags, rating_sum, rating_count)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+                    """, (this_slug, this_title, this_author, "", description, cover_name, json.dumps(pages), json.dumps(tags)))
                     conn.commit()
                     added.append(this_slug)
                 except Exception as e:
@@ -451,9 +459,9 @@ def api_add_manga():
 
         try:
             conn.execute("""
-                INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
-            """, (slug, title, author, description, cover_name, json.dumps(pages), json.dumps(tags)))
+                INSERT INTO mangas (slug, title, author, original_title, description, cover, pages, tags, rating_sum, rating_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+            """, (slug, title, author, original_title, description, cover_name, json.dumps(pages), json.dumps(tags)))
             conn.commit()
         except Exception as e:
             conn.close()
@@ -548,14 +556,10 @@ def api_delete_all_manga():
         return jsonify({"error": f"DB error: {e}"}), 500
     conn.close()
 
-    # clear cache and bulk progress
+    # clear cache
     try:
         from helpers import _cache
         _cache.clear()
-    except:
-        pass
-    try:
-        shared['BULK_PROGRESS_FILE'].unlink(missing_ok=True)
     except:
         pass
 
@@ -586,6 +590,7 @@ def api_edit_manga():
     # New metadata
     new_title = (request.form.get("title") or row["title"]).strip() or row["title"]
     new_author = (request.form.get("author") or row["author"] or "").strip()
+    new_original = (request.form.get("original_title") or (row["original_title"] if "original_title" in row.keys() else "")).strip()
     new_description = request.form.get("description", row["description"] or "")
     new_tags_raw = request.form.get("tags", None)
     if new_tags_raw is not None:
@@ -699,7 +704,7 @@ def api_edit_manga():
                                 pass
                 idx += 1
     # update pages
-    conn.execute("UPDATE mangas SET title = ?, author = ?, description = ?, tags = ?, cover = ?, pages = ? WHERE slug = ?", (new_title, new_author, new_description, json.dumps(tags), cover_name, json.dumps(current_pages), slug))
+    conn.execute("UPDATE mangas SET title = ?, author = ?, original_title = ?, description = ?, tags = ?, cover = ?, pages = ? WHERE slug = ?", (new_title, new_author, new_original, new_description, json.dumps(tags), cover_name, json.dumps(current_pages), slug))
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "added_pages": added_count, "total_pages": len(current_pages)})

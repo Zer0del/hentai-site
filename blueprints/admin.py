@@ -12,7 +12,7 @@ admin_bp = Blueprint('admin', __name__)
 def _get_shared():
     from app import (
         get_current_user, get_db, get_cover_url, get_all_mangas,
-        get_manga_by_slug, ADMIN_PASS, _force_wal_checkpoint,
+        get_manga_by_slug, ADMIN_PASS,
         slugify, get_manga_dir, extract_zip_and_normalize, save_uploaded_file, _finalize_cover,
         _create_thumbnail
     )
@@ -58,84 +58,7 @@ def admin_page():
 
 # Bulk removed - use multiple ZIP uploads in the main admin form instead
 
-# Bulk scan/start etc removed
-
-# Bulk removed - multiple ZIP upload in main form is the new way to add several mangas at once.
-
-@admin_bp.route("/api/bulk/stop", methods=["POST"])
-def api_bulk_stop():
-    shared = _get_shared()
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return jsonify({"error": "admin only"}), 403
-    with shared['_bulk_lock']:
-        shared['_bulk_stop_requested'] = True
-        shared['_bulk_state']["running"] = False
-    # Sync the module-level global that the worker function (defined in app.py) actually checks
-    try:
-        import app as appmod
-        appmod._bulk_stop_requested = True
-    except Exception:
-        pass
-    return jsonify({"ok": True})
-
-@admin_bp.route("/api/bulk/status")
-def api_bulk_status():
-    shared = _get_shared()
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return jsonify({"error": "admin only"}), 403
-
-    with shared['_bulk_lock']:
-        state_copy = {
-            "running": shared['_bulk_state'].get("running", False),
-            "total": shared['_bulk_state'].get("total", 0),
-            "done": shared['_bulk_state'].get("done", 0),
-            "current": shared['_bulk_state'].get("current", ""),
-            "logs": list(shared['_bulk_state'].get("logs", [])),
-            "items": list(shared['_bulk_state'].get("items", [])),
-            "current_root": str(shared['get_bulk_root']()),
-        }
-    return jsonify(state_copy)
-
-@admin_bp.route("/api/bulk/clear-progress", methods=["POST"])
-def api_bulk_clear_progress():
-    shared = _get_shared()
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return jsonify({"error": "admin only"}), 403
-    try:
-        if shared['BULK_PROGRESS_FILE'].exists():
-            shared['BULK_PROGRESS_FILE'].unlink()
-        with shared['_bulk_lock']:
-            shared['_append_bulk_log']("Progress file cleared. Rescan recommended.")
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@admin_bp.route("/api/bulk/set-root", methods=["POST"])
-def api_bulk_set_root():
-    shared = _get_shared()
-    user = shared['get_current_user']()
-    if not user or not user.get('is_admin'):
-        return jsonify({"error": "admin only"}), 403
-
-    if request.is_json:
-        data = request.get_json(silent=True) or {}
-    else:
-        data = request.form
-    path = (data.get("path") or "").strip()
-
-    if not path:
-        return jsonify({"error": "Укажите путь к папке"}), 400
-
-    try:
-        new_root = shared['set_bulk_root'](path)
-        shared['_append_bulk_log'](f"📁 Папка сканирования изменена на: {new_root}")
-        return jsonify({"ok": True, "root": str(new_root)})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
-
+# Legacy bulk system fully removed (replaced by mass folder import + multiple ZIP in add form)
 
 # ==================== FORUM ADMIN ====================
 
@@ -331,12 +254,15 @@ def api_mass_import():
     root = Path(root_str)
     if not root.exists() or not root.is_dir():
         return jsonify({"error": "Папка не найдена"}), 400
+    _load_mass_state()
+    mass_stop_requested = False
     mass_import_state["running"] = True
     mass_import_state["total"] = 0
     mass_import_state["done"] = 0
     mass_import_state["added"] = 0
     mass_import_state["current"] = "Начинаем..."
     mass_import_state["error"] = None
+    _save_mass_state()
     import threading
     t = threading.Thread(target=_process_mass_import, args=(root_str,), daemon=True)
     t.start()
@@ -344,7 +270,18 @@ def api_mass_import():
 
 @admin_bp.route("/api/mass_import/status")
 def api_mass_import_status():
+    _load_mass_state()
     return jsonify(mass_import_state)
+
+@admin_bp.route("/api/mass_import/stop", methods=["POST"])
+def api_mass_import_stop():
+    user = _get_shared()['get_current_user']()
+    if not user or not user.get('is_admin'):
+        return jsonify({"error": "admin only"}), 403
+    mass_stop_requested = True
+    mass_import_state["current"] = "Остановка..."
+    _save_mass_state()
+    return jsonify({"ok": True})
 
 
 mass_import_state = {
@@ -355,14 +292,37 @@ mass_import_state = {
     "added": 0,
     "error": None
 }
+mass_stop_requested = False
+
+MASS_PROGRESS_FILE = Path("mass_import_progress.json")
+
+def _save_mass_state():
+    try:
+        MASS_PROGRESS_FILE.write_text(json.dumps(mass_import_state, ensure_ascii=False))
+    except Exception:
+        pass
+
+def _load_mass_state():
+    try:
+        if MASS_PROGRESS_FILE.exists():
+            data = json.loads(MASS_PROGRESS_FILE.read_text())
+            for k in mass_import_state:
+                if k in data:
+                    mass_import_state[k] = data[k]
+    except Exception:
+        pass
+
+_load_mass_state()  # load persisted on startup
 
 def _process_mass_import(root_str):
-    global mass_import_state
+    global mass_import_state, mass_stop_requested
+    mass_stop_requested = False
     mass_import_state["running"] = True
     mass_import_state["error"] = None
     mass_import_state["added"] = 0
     mass_import_state["done"] = 0
     mass_import_state["current"] = ""
+    _save_mass_state()
     try:
         root = Path(root_str)
         if not root.exists() or not root.is_dir():
@@ -378,8 +338,9 @@ def _process_mass_import(root_str):
                     total += 1
         mass_import_state["total"] = total
         mass_import_state["done"] = 0
+        _save_mass_state()
         from app import slugify as _slugify, get_manga_dir as _get_manga_dir, get_db as _get_db
-        from helpers import extract_zip_and_normalize as _extract, _finalize_cover as _final, _create_thumbnail as _thumb
+        from helpers import extract_zip_and_normalize as _extract, _finalize_cover as _final, _create_thumbnail as _thumb, natural_sort_key as _natural_sort
         conn = _get_db()
         added = 0
         try:
@@ -388,10 +349,37 @@ def _process_mass_import(root_str):
                 author = author_dir.name
                 for item in sorted(author_dir.iterdir()):
                     try:
+                        if mass_stop_requested:
+                            mass_import_state["current"] = "Остановлено пользователем"
+                            break
                         if item.is_dir():
                             title = item.name
+                            author = author  # from parent
+                            description = ""
+                            tags_list = []
+                            orig_title = ""
+                            # Tags.txt support
+                            try:
+                                tags_f = item / "Tags.txt"
+                                if tags_f.exists():
+                                    for line in tags_f.read_text(encoding='utf-8', errors='ignore').splitlines():
+                                        if ':' in line:
+                                            k, v = [x.strip() for x in line.split(':', 1)]
+                                            kl = k.lower()
+                                            if kl in ('name', 'title'):
+                                                title = v
+                                            elif kl in ('original', 'orig'):
+                                                orig_title = v
+                                            elif kl in ('artist', 'author'):
+                                                author = v
+                                            elif kl in ('descr', 'discr', 'description'):
+                                                description = v
+                                            elif kl == 'tags':
+                                                tags_list = [t.strip() for t in v.split(',') if t.strip()]
+                            except:
+                                pass
                             exts = {'.webp', '.jpg', '.jpeg', '.png', '.gif'}
-                            images = sorted([f for f in item.iterdir() if f.is_file() and f.suffix.lower() in exts], key=lambda f: f.name)
+                            images = sorted([f for f in item.iterdir() if f.is_file() and f.suffix.lower() in exts], key=lambda f: _natural_sort(f.name))
                             if not images: continue
                             pages = []
                             manga_slug = _slugify(title)
@@ -415,12 +403,41 @@ def _process_mass_import(root_str):
                                     c = _final(manga_dir, cover_name)
                                     if c: cover_name = c
                                 except: pass
-                            conn.execute("INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count) VALUES (?,?,?,?,?,?,?,0,0)", (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
+                            conn.execute("INSERT INTO mangas (slug, title, author, original_title, description, cover, pages, tags, rating_sum, rating_count) VALUES (?,?,?,?,?,?,?,?,0,0)", (manga_slug, title, author, orig_title or "", description or "", cover_name, json.dumps(pages), json.dumps(tags_list or [])))
                             conn.commit()
                             added += 1
                             mass_import_state["added"] = added
+                            _save_mass_state()
                         elif item.is_file() and item.suffix.lower() in {'.zip','.cbz'}:
                             title = item.stem
+                            author = author
+                            description = ""
+                            tags_list = []
+                            orig_title = ""
+                            # Tags.txt support inside zip
+                            try:
+                                import zipfile
+                                with zipfile.ZipFile(item) as zf:
+                                    for n in zf.namelist():
+                                        if n.lower().endswith('tags.txt') or 'tags.txt' in n.lower():
+                                            content = zf.read(n).decode('utf-8', errors='ignore')
+                                            for line in content.splitlines():
+                                                if ':' in line:
+                                                    k, v = [x.strip() for x in line.split(':', 1)]
+                                                    kl = k.lower()
+                                                    if kl in ('name', 'title'):
+                                                        title = v
+                                                    elif kl in ('original', 'orig'):
+                                                        orig_title = v
+                                                    elif kl in ('artist', 'author'):
+                                                        author = v
+                                                    elif kl in ('descr', 'discr', 'description'):
+                                                        description = v
+                                                    elif kl == 'tags':
+                                                        tags_list = [t.strip() for t in v.split(',') if t.strip()]
+                                            break
+                            except:
+                                pass
                             manga_slug = _slugify(title)
                             ex = conn.execute("SELECT id FROM mangas WHERE slug=?", (manga_slug,)).fetchone()
                             if ex: manga_slug = f"{manga_slug}-{uuid.uuid4().hex[:6]}"
@@ -443,13 +460,15 @@ def _process_mass_import(root_str):
                                     c = _final(manga_dir, cover_name)
                                     if c: cover_name = c
                                 except: pass
-                            conn.execute("INSERT INTO mangas (slug, title, author, description, cover, pages, tags, rating_sum, rating_count) VALUES (?,?,?,?,?,?,?,0,0)", (manga_slug, title, author, "", cover_name, json.dumps(pages), json.dumps([])))
+                            conn.execute("INSERT INTO mangas (slug, title, author, original_title, description, cover, pages, tags, rating_sum, rating_count) VALUES (?,?,?,?,?,?,?,?,0,0)", (manga_slug, title, author, orig_title or "", description or "", cover_name, json.dumps(pages), json.dumps(tags_list or [])))
                             conn.commit()
                             added += 1
                             mass_import_state["added"] = added
+                            _save_mass_state()
                     except Exception as e: print("mass item err", e)
                     mass_import_state["done"] = mass_import_state.get("done", 0) + 1
                     mass_import_state["current"] = getattr(locals().get('item'), 'name', str(locals().get('item', '')))
+                    _save_mass_state()
             print("Mass import bg done, added", added)
         finally:
             conn.close()
@@ -458,5 +477,7 @@ def _process_mass_import(root_str):
         mass_import_state["error"] = str(e)
     finally:
         mass_import_state["running"] = False
+        mass_stop_requested = False
+        _save_mass_state()
 
 print("admin blueprint loaded")

@@ -62,7 +62,7 @@
                              class="manga-cover w-full transition duration-200 group-hover:scale-[1.015]"
                              onerror="this.src='https://picsum.photos/id/1011/300/400'">
                         
-                        <div class="absolute bottom-2 right-2 bg-black/75 text-white text-xs font-mono px-1.5 py-px rounded">
+                        <div class="absolute bottom-2 right-2 bg-black/75 text-white text-sm font-mono px-2 py-0.5 rounded">
                             {{ m.pages_count }} стр.
                         </div>
                         
@@ -201,7 +201,7 @@
             <!-- Pass -->
             <div>
                 <label class="block text-xs text-white/60 mb-1.5">Пароль администратора</label>
-                <input type="password" name="password" value="admin123" required
+                <input type="password" name="password" value="{{ admin_pass or 'admin123' }}" required
                        class="w-full bg-[#1a1a1a] border border-white/15 focus:border-[#e11d48] rounded-xl px-4 py-2.5 text-sm outline-none">
             </div>
 

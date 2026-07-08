@@ -24,9 +24,14 @@
             
             <h1 class="text-5xl tracking-tighter font-semibold leading-none mb-3">{{ manga.title }}</h1>
             
-            {% if manga.author %}
-            <div class="text-sm text-white/60 mb-4">Автор: <a href="/?q={{ manga.author | urlencode }}" class="text-white font-medium hover:text-[#e11d48]">{{ manga.author }}</a></div>
-            {% endif %}
+            <div class="flex items-baseline gap-4 text-sm text-white/60 mb-4">
+                {% if manga.original_title %}
+                <div>Ориг.: <span class="text-white font-medium">{{ manga.original_title }}</span></div>
+                {% endif %}
+                {% if manga.author %}
+                <div class="ml-auto">Автор: <a href="/?q={{ manga.author | urlencode }}" class="text-white font-medium hover:text-[#e11d48]">{{ manga.author }}</a></div>
+                {% endif %}
+            </div>
 
             <!-- Actions row (soft, muted redesign) -->
             <div class="flex flex-wrap items-center gap-2.5 mb-6">
@@ -38,14 +43,14 @@
 
                 {% if current_user %}
                 <button onclick="toggleFavorite({{ manga.id }})"
-                        class="inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl border text-sm font-medium transition {{ 'bg-white/10 text-white border-white/20' if manga.is_favorite else 'bg-white/5 hover:bg-white/10 border-white/10' }}"
+                        class="inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl border text-sm font-medium transition {{ 'bg-[#e11d48] text-white border-[#e11d48]' if manga.is_favorite else 'bg-white/5 hover:bg-white/10 border-white/10' }}"
                         id="fav-btn">
                     <i class="fa-solid fa-heart"></i>
                     <span class="hidden sm:inline">Избранное</span>
                 </button>
 
                 <button id="read-btn" onclick="toggleReadStatus({{ manga.id }}, {{ 1 if manga.is_read else 0 }})"
-                        class="inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium transition">
+                        class="inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl text-sm font-medium transition {{ 'bg-red-900/50 hover:bg-red-900/70 border-red-800/50 text-red-200' if manga.is_read else 'bg-white/5 hover:bg-white/10 border-white/10' }}">
                     <i class="fa-solid fa-check"></i>
                     <span class="hidden sm:inline">{{ 'Отметить непрочитанной' if manga.is_read else 'Отметить прочитанной' }}</span>
                 </button>
@@ -250,7 +255,7 @@ function showAllPreviews() {
 
                     <div>
                         <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Пароль админа</label>
-                        <input type="password" name="password" value="admin123" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#e11d48]">
+                        <input type="password" name="password" value="{{ admin_pass }}" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#e11d48]">
                     </div>
 
                     <div class="pt-3">
@@ -261,6 +266,11 @@ function showAllPreviews() {
                     <div>
                         <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Автор</label>
                         <input type="text" name="author" id="edit-author" value="{{ manga.author or '' }}" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs uppercase tracking-wider text-white/60 mb-1">Оригинальное название</label>
+                        <input type="text" name="original_title" id="edit-original" value="{{ manga.original_title or '' }}" class="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-2.5 text-sm">
                     </div>
 
                     <div>
@@ -298,6 +308,16 @@ function showAllPreviews() {
                                 class="flex-1 py-3 rounded-2xl bg-[#e11d48] text-sm font-semibold">Сохранить</button>
                     </div>
                     <div id="edit-status" class="text-center text-xs pt-2 text-white/60 h-4"></div>
+
+                    <!-- Delete button in edit -->
+                    <div class="pt-3 border-t border-white/10 mt-3">
+                        <button type="button" onclick="deleteCurrentMangaFromEdit()"
+                                class="w-full py-2 rounded-2xl bg-red-900/70 hover:bg-red-900 text-sm text-white flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-trash"></i>
+                            <span>Удалить мангу полностью</span>
+                        </button>
+                        <div class="text-[10px] text-white/40 text-center mt-1">Требует пароль админа</div>
+                    </div>
                 </form>
             </div>
 
@@ -326,6 +346,7 @@ function showAllPreviews() {
 <script>
 const MANGA_ID = {{ manga.id }};
 const MANGA_SLUG = "{{ manga.slug }}";
+const ADMIN_PASS = "{{ admin_pass }}";
 
 // Track current personal rating for toggle-to-cancel
 let myCurrentRating = {{ manga.my_rating or 0 }};
@@ -494,7 +515,7 @@ function renderPagesList(container) {
         div.querySelector('button').onclick = async () => {
             if (!confirm(`Удалить страницу ${fname}?`)) return;
 
-            const pass = prompt('Пароль администратора:', 'admin123');
+            const pass = prompt('Пароль администратора:', ADMIN_PASS || 'admin123');
             if (!pass) return;
 
             const fd = new FormData();
@@ -559,6 +580,29 @@ async function submitEdit(e) {
     }
 }
 
+async function deleteCurrentMangaFromEdit() {
+    if (!confirm('Удалить эту мангу навсегда? (вместе с историей, оценками, избранным)')) return;
+    const pass = prompt('Введите пароль администратора:', 'admin123');
+    if (!pass) return;
+
+    const fd = new FormData();
+    fd.append('slug', MANGA_SLUG);
+    fd.append('password', pass);
+
+    try {
+        const r = await fetch('/api/delete_manga', { method: 'POST', body: fd });
+        const j = await r.json();
+        if (r.ok && j.ok) {
+            alert('Манга удалена');
+            window.location.href = '/';
+        } else {
+            alert(j.error || 'Ошибка удаления');
+        }
+    } catch (e) {
+        alert('Ошибка сети');
+    }
+}
+
 async function toggleFavorite(mangaId) {
     const btn = document.getElementById('fav-btn');
     try {
@@ -602,6 +646,12 @@ async function toggleReadStatus(mangaId, current) {
                 const span = btn.querySelector('span');
                 if (span) {
                     span.textContent = newRead ? 'Отметить непрочитанной' : 'Отметить прочитанной';
+                }
+                // different color for "mark unread" vs "mark read"
+                if (newRead) {
+                    btn.className = 'inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl text-sm font-medium transition bg-red-900/50 hover:bg-red-900/70 border-red-800/50 text-red-200';
+                } else {
+                    btn.className = 'inline-flex items-center gap-x-2 px-3.5 py-2 rounded-2xl text-sm font-medium transition bg-white/5 hover:bg-white/10 border-white/10';
                 }
             }
 

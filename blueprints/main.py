@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, abort, jsonify, current_app, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, abort, jsonify, current_app, send_file, make_response
 import json
 
 main_bp = Blueprint('main', __name__)
@@ -146,6 +146,7 @@ def index():
         grid_mangas = latest
         all_tags_out = []
 
+    from app import ADMIN_PASS
     return render_template(
         "index.html",
         mangas=grid_mangas,
@@ -161,6 +162,7 @@ def index():
         latest_mangas=latest,
         latest_page=latest_page,
         total_latest_pages=total_latest_pages,
+        admin_pass=ADMIN_PASS,
     )
 
 @main_bp.route("/random")
@@ -386,6 +388,7 @@ def manga_detail(slug):
         "slug": row["slug"],
         "title": row["title"],
         "author": row["author"] or "",
+        "original_title": row["original_title"] if "original_title" in row.keys() else "",
         "description": row["description"],
         "cover": cover,
         "tags": tags,
@@ -397,7 +400,8 @@ def manga_detail(slug):
         "is_favorite": is_favorite,
         "is_read": is_read,
     }
-    return render_template("detail.html", manga=manga, current_user=user, comments=comments)
+    from app import ADMIN_PASS
+    return render_template("detail.html", manga=manga, current_user=user, comments=comments, admin_pass=ADMIN_PASS)
 
 @main_bp.route("/manga/<int:manga_id>/<int:page>")
 @main_bp.route("/manga/<slug>/<int:page>")
@@ -688,3 +692,13 @@ def download_manga(slug):
                 os.unlink(zip_path)
         except:
             pass
+
+
+# Silence noisy 404s in console (favicon, Chrome devtools probe)
+@main_bp.route('/favicon.ico')
+def favicon():
+    return make_response('', 204)
+
+@main_bp.route('/.well-known/appspecific/com.chrome.devtools.json')
+def chrome_devtools():
+    return jsonify({}), 200
