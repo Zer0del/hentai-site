@@ -1486,7 +1486,7 @@ def api_delete_page():
 
 # All routes have been moved to the blueprints/ directory:
 # - blueprints/main.py : public pages and some user routes
-# - blueprints/admin.py : admin dashboard and bulk UI
+# - blueprints/admin.py : admin UI and bulk (legacy)
 # - blueprints/api.py : all API endpoints including add/edit/delete/bulk APIs
 
 # Registration is handled inside create_app() at the top of this file.

@@ -390,6 +390,8 @@ async function loadMangaData() {
     if (pathParts.length >= 3 && !isNaN(parseInt(lastPart))) {
         start = parseInt(lastPart);
     }
+    if (start > TOTAL_PAGES) start = TOTAL_PAGES;
+    if (start < 1) start = 1;
     // Preload large window for seamless (nhentai-like)
     const startIdx = start - 1;
     preloadPages(Math.max(0, startIdx - 3), startIdx + 12);
@@ -639,6 +641,7 @@ function goToPage(page, animate = true) {
     }
     if (page < 1) page = 1;
     if (page > TOTAL_PAGES) {
+        page = TOTAL_PAGES;  // clamp bad high pages from history etc.
         // Reached / turned past last page → mark completed then return to manga page
         const finalPage = TOTAL_PAGES;
         if (window.CURRENT_USER_ID && TOTAL_PAGES > 0) {
@@ -974,10 +977,18 @@ function setupZoomPan() {
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
         const newZoom = Math.max(0.5, Math.min(4.5, zoomLevel + delta));
         
-        // Zoom toward the cursor point. Center-relative works reliably on desktop for the centered viewer.
+        // Zoom toward the cursor point.
+        // Desktop: center-relative for natural feel in paged viewer.
+        // Mobile: absolute from top-left to better follow finger/tap position.
         const rect = container.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left - rect.width / 2;
-        const mouseY = e.clientY - rect.top - rect.height / 2;
+        let mouseX, mouseY;
+        if (isTouchDevice) {
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        } else {
+            mouseX = e.clientX - rect.left - rect.width / 2;
+            mouseY = e.clientY - rect.top - rect.height / 2;
+        }
 
         const scaleFactor = newZoom / zoomLevel;
         panX = (panX - mouseX) * scaleFactor + mouseX;

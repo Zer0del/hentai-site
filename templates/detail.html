@@ -76,9 +76,9 @@
             <!-- Stats -->
             <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm mb-6">
                 <div class="flex items-center gap-x-2">
-                    <div class="flex text-3xl cursor-pointer" id="rating-stars" title="Оцените от 1 до 10. Кликните ещё раз по той же звезде, чтобы убрать оценку.">
+                    <div class="flex text-2xl sm:text-3xl cursor-pointer" id="rating-stars" title="Оцените от 1 до 10. Кликните ещё раз по той же звезде, чтобы убрать оценку.">
                         {% for i in range(1,11) %}
-                        <i class="fa-solid fa-star px-0.5 transition {{ 'text-[#f59e0b]' if manga.rating >= i - 0.5 else 'text-white/20' }}" 
+                        <i class="fa-solid fa-star px-0.5 sm:px-1 transition {{ 'text-[#f59e0b]' if manga.rating >= i - 0.5 else 'text-white/20' }}" 
                            data-value="{{ i }}" onclick="rateByStar({{ i }})"></i>
                         {% endfor %}
                     </div>

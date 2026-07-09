@@ -441,6 +441,7 @@ def reader(manga_id=None, slug=None, page=1):
     page_thumbs = get_page_urls(row["slug"], pages, thumb=True)
 
     start_page = request.args.get('page', type=int) or page or 1
+    start_page = max(1, min(start_page, len(pages) or 1))
 
     manga = {
         "id": row["id"],
@@ -557,7 +558,18 @@ def profile():
     history = []
     for r in hist_rows:
         cover = get_cover_url(r, thumb=True)
-        history.append({**dict(r), "cover": cover, "my_score": rating_map.get(r['id'])})
+        d = dict(r)
+        try:
+            pgs = json.loads(d.get("pages") or "[]")
+            pcount = len(pgs)
+            lp = int(d.get("last_page") or 1)
+            if pcount > 0:
+                lp = min(lp, pcount)
+            d["last_page"] = lp
+            d["pages_count"] = pcount
+        except:
+            pass
+        history.append({**d, "cover": cover, "my_score": rating_map.get(r['id'])})
 
     rating_rows = conn.execute("""
         SELECT m.* , ur.score FROM user_ratings ur

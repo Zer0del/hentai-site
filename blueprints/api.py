@@ -222,6 +222,7 @@ def api_mark_read():
     if not user:
         return jsonify({"error": "login required"}), 403
     data = request.get_json(silent=True) or request.form
+    conn = None
     try:
         manga_id = int(data.get("manga_id"))
         last_page = int(data.get("last_page", 1))
@@ -230,12 +231,31 @@ def api_mark_read():
             # JS sends "read": true/false meaning desired completed/read state
             completed = bool(read_val) if isinstance(read_val, (bool, int)) else str(read_val).lower() in ('1', 'true', 'yes')
             if completed:
-                last_page = max(last_page, 9999)  # mark full read
+                # set real total pages instead of sentinel
+                conn = shared['get_db']()
+                mrow = conn.execute("SELECT pages FROM mangas WHERE id=?", (manga_id,)).fetchone()
+                if mrow:
+                    try:
+                        pcount = len(json.loads(mrow['pages'] or '[]'))
+                        if pcount > 0:
+                            last_page = pcount
+                    except:
+                        pass
         else:
             completed = bool(data.get("completed", False))
     except Exception:
         return jsonify({"error": "bad input"}), 400
-    shared['update_user_history'](user['id'], manga_id, last_page, completed)
+    finally:
+        if conn:
+            conn.close()
+    if completed:
+        shared['update_user_history'](user['id'], manga_id, last_page, completed)
+    else:
+        # Remove completely from history, as if never opened
+        db = shared['get_db']()
+        db.execute("DELETE FROM user_history WHERE user_id=? AND manga_id=?", (user['id'], manga_id))
+        db.commit()
+        db.close()
     try:
         from app import invalidate_user_tag_cache
         invalidate_user_tag_cache(user['id'])
@@ -804,5 +824,6 @@ def api_search():
     # simple relevance: exact title start first
     results.sort(key=lambda x: (0 if x["title"].lower().startswith(q) else 1, -x["rating"]))
     return jsonify(results[:limit])
+
 
 print("api blueprint loaded with core endpoints")

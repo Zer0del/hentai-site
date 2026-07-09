@@ -329,10 +329,10 @@ def update_user_history(user_id, manga_id, last_page, completed=False):
         INSERT INTO user_history (user_id, manga_id, last_page, completed, last_read_at)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id, manga_id) DO UPDATE SET
-            last_page = MAX(last_page, ?),
+            last_page = CASE WHEN last_page > 9000 THEN ? ELSE MAX(last_page, ?) END,
             completed = ?,
             last_read_at = CURRENT_TIMESTAMP
-    """, (user_id, manga_id, last_page, int(completed), last_page, int(completed)))
+    """, (user_id, manga_id, last_page, int(completed), last_page, last_page, int(completed)))
     conn.commit()
     conn.close()
 
@@ -402,6 +402,12 @@ def _compute_recommendations(user_id, limit=8):
         read_ids = {r['manga_id'] for r in conn.execute(
             "SELECT manga_id FROM user_history WHERE user_id=? AND completed=1", (user_id,)
         ).fetchall()}
+        rated_ids = {r['manga_id'] for r in conn.execute(
+            "SELECT manga_id FROM user_ratings WHERE user_id=?", (user_id,)
+        ).fetchall()}
+        fav_ids = {r['manga_id'] for r in conn.execute(
+            "SELECT manga_id FROM user_favorites WHERE user_id=?", (user_id,)
+        ).fetchall()}
 
         recs = conn.execute("""
             SELECT *, 
@@ -412,7 +418,7 @@ def _compute_recommendations(user_id, limit=8):
 
         result = []
         for r in recs:
-            if r['id'] in read_ids:
+            if r['id'] in read_ids or r['id'] in rated_ids or r['id'] in fav_ids:
                 continue
             r = dict(r)
             r["cover"] = get_cover_url(r, thumb=True)
@@ -420,17 +426,33 @@ def _compute_recommendations(user_id, limit=8):
             if len(result) >= limit:
                 break
         conn.close()
-        return result
+        # Final strict filter
+        try:
+            c2 = get_db()
+            interacted = set()
+            for tbl in ("user_favorites", "user_ratings", "user_history"):
+                for rr in c2.execute(f"SELECT manga_id FROM {tbl} WHERE user_id=?", (user_id,)).fetchall():
+                    interacted.add(rr['manga_id'])
+            c2.close()
+            result = [x for x in result if x['id'] not in interacted]
+        except Exception as e: print('recs filter err', e)
+        return result[:limit]
 
     conn = get_db()
     read_ids = {r['manga_id'] for r in conn.execute(
         "SELECT manga_id FROM user_history WHERE user_id=? AND completed=1", (user_id,)
     ).fetchall()}
+    rated_ids = {r['manga_id'] for r in conn.execute(
+        "SELECT manga_id FROM user_ratings WHERE user_id=?", (user_id,)
+    ).fetchall()}
+    fav_ids = {r['manga_id'] for r in conn.execute(
+        "SELECT manga_id FROM user_favorites WHERE user_id=?", (user_id,)
+    ).fetchall()}
 
     candidates = conn.execute("SELECT * FROM mangas").fetchall()
     scored = []
     for m in candidates:
-        if m['id'] in read_ids:
+        if m['id'] in read_ids or m['id'] in rated_ids or m['id'] in fav_ids:
             continue
         tags = json.loads(m['tags'] or '[]')
         score = sum(tag_weights.get(t, 0) for t in tags)
@@ -450,7 +472,17 @@ def _compute_recommendations(user_id, limit=8):
         m["cover"] = get_cover_url(m, thumb=True)
         result.append(m)
     conn.close()
-    return result
+    # Final strict filter
+    try:
+        c2 = get_db()
+        interacted = set()
+        for tbl in ("user_favorites", "user_ratings", "user_history"):
+            for rr in c2.execute(f"SELECT manga_id FROM {tbl} WHERE user_id=?", (user_id,)).fetchall():
+                interacted.add(rr['manga_id'])
+        c2.close()
+        result = [x for x in result if x['id'] not in interacted]
+    except Exception as e: print('recs filter err', e)
+    return result[:limit]
 
 def get_recommendations(user_id, limit=8):
     if not user_id:
